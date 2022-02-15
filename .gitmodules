@@ -1,0 +1,6 @@
+[submodule "icalendarlib"]
+	path = icalendarlib
+	url = https://github.com/jp-embedded/icalendarlib.git
+[submodule "date"]
+	path = date
+	url = https://github.com/HowardHinnant/date.git
