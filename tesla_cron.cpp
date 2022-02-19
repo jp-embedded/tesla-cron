@@ -22,6 +22,7 @@
 //todo: at 22 & 23: set scheduled charging time to cheapest two-hour period
 // Seems like scheduled charging must be set <= around 18h in the future. Otherwise it will start charging immediately.
 // - Add support for time zone in icalendarlib: For example, convert this to UTC: "DTSTART;TZID=Europe/Copenhagen:20220207T060000"
+// move mail address to config
 
 #include "config.inc"
 
@@ -111,25 +112,33 @@ std::string download_vehicle_data(std::string vin)
 {
 	using namespace boost::python;
 
-	try {
-		Py_Initialize();
-		object teslapy = import("teslapy");
+	int timeout = 10;
+	while (true) {
+		try {
+			object teslapy = import("teslapy");
 
-		object tesla = teslapy.attr("Tesla")("jp@jp-embedded.com", true, NULL, 0, 10, "tesla_cron", NULL, "/var/tmp/tesla_cron.json");
-		object authorized = tesla.attr("authorized"); 
-		if (!extract<bool>(authorized)) throw std::runtime_error("Not authorized");
+			object tesla = teslapy.attr("Tesla")(account.email, true, NULL, 0, 10, "tesla_cron", NULL, "/var/tmp/tesla_cron.json");
+			object authorized = tesla.attr("authorized"); 
+			if (!extract<bool>(authorized)) throw std::runtime_error("Not authorized");
 
-		object vehicles = tesla.attr("vehicle_list")();
-		int index = get_vehicle_index(vehicles, vin);
+			object vehicles = tesla.attr("vehicle_list")();
+			int index = get_vehicle_index(vehicles, vin);
 
-		object sync_waue_up = vehicles[index].attr("sync_wake_up")(); 
+			object sync_waue_up = vehicles[index].attr("sync_wake_up")(); 
 
-		object data = vehicles[index].attr("get_vehicle_data")(); 
-		//std::cout << extract<std::string>(str(data))() << std::endl;
-		return extract<std::string>(str(data))();
-	}
-       	catch( error_already_set ) {
-		PyErr_Print();
+			object data = vehicles[index].attr("get_vehicle_data")(); 
+			//std::cout << extract<std::string>(str(data))() << std::endl;
+			return extract<std::string>(str(data))();
+		}
+		catch( error_already_set ) {
+			PyErr_Print();
+			if (--timeout == 0) throw;
+		}
+		catch (std::exception &e) {
+			std::cerr << "Error: " << e.what() << std::endl;
+			if (--timeout == 0) throw;
+		}
+		std::this_thread::sleep_for(std::chrono::minutes(1));
 	}
 	return std::string();
 }
@@ -138,24 +147,38 @@ void start_charge(std::string vin)
 {
 	using namespace boost::python;
 
-	try {
-		Py_Initialize();
-		object teslapy = import("teslapy");
+	int timeout = 10;
+	while (true) {
+		try {
+			object teslapy = import("teslapy");
 
-		object tesla = teslapy.attr("Tesla")("jp@jp-embedded.com", true, NULL, 0, 10, "tesla_cron", NULL, "/var/tmp/tesla_cron.json");
-		object authorized = tesla.attr("authorized"); 
-		if (!extract<bool>(authorized)) throw std::runtime_error("Not authorized");
+			object tesla = teslapy.attr("Tesla")(account.email, true, NULL, 0, 10, "tesla_cron", NULL, "/var/tmp/tesla_cron.json");
+			object authorized = tesla.attr("authorized"); 
+			if (!extract<bool>(authorized)) throw std::runtime_error("Not authorized");
 
-		object vehicles = tesla.attr("vehicle_list")();
-		int index = get_vehicle_index(vehicles, vin);
+			object vehicles = tesla.attr("vehicle_list")();
+			int index = get_vehicle_index(vehicles, vin);
 
-		object sync_waue_up = vehicles[index].attr("sync_wake_up")(); 
+			object sync_waue_up = vehicles[index].attr("sync_wake_up")(); 
 
-		// todo: fails if already charging!
-		object ign = vehicles[index].attr("command")("START_CHARGE"); 
-	}
-       	catch( error_already_set ) {
-		PyErr_Print();
+			// Fails if already charging. todo: verify state after start
+			try {
+				object ign = vehicles[index].attr("command")("START_CHARGE"); 
+			}
+			catch (...) {
+			}
+
+			return;
+		}
+		catch( error_already_set ) {
+			PyErr_Print();
+			if (--timeout == 0) throw;
+		}
+		catch (std::exception &e) {
+			std::cerr << "Error: " << e.what() << std::endl;
+			if (--timeout == 0) throw;
+		}
+		std::this_thread::sleep_for(std::chrono::minutes(1));
 	}
 }
 
@@ -189,14 +212,15 @@ std::string download_el_prices()
 
 			r.perform();
 			std::string response_str = response.str();
-			if (response_str.size() > 0) return response_str;
-
-			if (--timeout == 0) throw std::runtime_error("No prices from server");
-			std::this_thread::sleep_for(std::chrono::minutes(1));
+			if (response_str.size() == 0) throw std::runtime_error("No prices from server");
+				
+			return response_str;
 		}
 		catch (std::exception &e) {
+			std::cerr << "Error: " << e.what() << std::endl;
 			if (--timeout == 0) throw;
 		}
+		std::this_thread::sleep_for(std::chrono::minutes(1));
 	}
 	return std::string();
 }
@@ -270,14 +294,25 @@ std::chrono::time_point<std::chrono::system_clock> find_cheapest_start(const pri
 
 std::string download_calendar(std::string url)
 {
-	curlpp::Cleanup clean;
-	curlpp::Easy r;
-	r.setOpt(new curlpp::options::Url(url));
-	std::ostringstream response;
-	r.setOpt(new curlpp::options::WriteStream(&response));
-	r.perform();
-	std::string response_str = boost::replace_all_copy(response.str(), "\r\n", "\n");
-	return response_str;
+	int timeout = 10;
+	while (true) {
+		try {
+			curlpp::Cleanup clean;
+			curlpp::Easy r;
+			r.setOpt(new curlpp::options::Url(url));
+			std::ostringstream response;
+			r.setOpt(new curlpp::options::WriteStream(&response));
+			r.perform();
+			std::string response_str = boost::replace_all_copy(response.str(), "\r\n", "\n");
+			return response_str;
+		}
+		catch (std::exception &e) {
+			std::cerr << "Error: " << e.what() << std::endl;
+			if (--timeout == 0) throw;
+		}
+		std::this_thread::sleep_for(std::chrono::minutes(1));
+	}
+	return std::string();
 }
 
 Event get_next_event(std::string cal_url) 
@@ -318,6 +353,8 @@ Event get_next_event(std::string cal_url)
 
 int main()
 {
+	Py_Initialize();
+
 	std::vector<price_entry> el_prices;
 	try {
 		el_prices = get_el_prices();
@@ -331,7 +368,7 @@ int main()
 		std::cerr << "Error: " << e.what() << std::endl;
 	}
 
-	for (auto &car : cars) {
+	for (auto &car : account.cars) {
 		try {
 			std::cout << std::endl;
 			std::cout << "--- " << car.vin << " ---" << std::endl;
