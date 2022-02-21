@@ -27,6 +27,10 @@ all: tesla_cron
 tesla_cron: $(OBJS)
 	$(CXX) -o $@ $^ -lcurl -lcurlpp -lboost_python38 -lpython3.8
 
+install:
+	install tesla_cron /usr/local/bin/
+	echo "1 * * * *	root	/usr/local/bin/tesla_cron | tee /var/log/tesla_cron.log" > /etc/cron.d/tesla_cron
+
 clean:
 	rm -f $(OBJS) $(OBJS:.o=.d) tesla_cron
 
