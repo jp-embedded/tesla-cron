@@ -1,6 +1,7 @@
 # tesla-cron
 
 Sorry for the lagging documentation - to be updated some day.
+Project is just started, so code has room for improvements.  
 
 ## What?
 
