@@ -95,3 +95,10 @@ Charge hours: 3
 Cheapest 3h seq: 2022-02-21 22:00:00.000000000 CET
 Start charge now
 ```
+
+### Installing
+```
+$sudo make install
+```
+
+tesla-cron now runs at start of each hour.
