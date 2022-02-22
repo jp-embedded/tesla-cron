@@ -38,10 +38,9 @@
 #include <list>
 #include <iostream>
 
-//todo: at 22 & 23: set scheduled charging time to cheapest two-hour period
+//todo: set scheduled charging time to cheapest two-hour period?
 // Seems like scheduled charging must be set <= around 18h in the future. Otherwise it will start charging immediately.
-// - Add support for time zone in icalendarlib: For example, convert this to UTC: "DTSTART;TZID=Europe/Copenhagen:20220207T060000"
-// move mail address to config
+// Add support for time zone in icalendarlib: For example, convert this to UTC: "DTSTART;TZID=Europe/Copenhagen:20220207T060000"
 
 #include "config.inc"
 
