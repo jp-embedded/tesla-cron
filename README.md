@@ -102,3 +102,5 @@ $sudo make install
 ```
 
 tesla-cron now runs at start of each hour.
+
+You can now configure your tesla to use scheduled charging to prevent it from starting charging immedeately and let tesla-cron start the charging.
