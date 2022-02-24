@@ -442,7 +442,7 @@ int main()
 		try {
 			std::cout << std::endl;
 			std::cout << "--- " << car.vin << " ---" << std::endl;
-			auto next_event = std::chrono::system_clock::now() + std::chrono::hours(20); // latest time to set charging
+			auto next_event = std::chrono::system_clock::now() + std::chrono::hours(48);
 			for (auto &cal : car.calendars) {
 				auto next = get_next_event(cal);
 				std::stringstream ss(next.DtStart);
@@ -456,7 +456,7 @@ int main()
 			std::cout << "Next event: " << date::make_zoned(date::current_zone(), next_event) << std::endl;
 			std::cout << endl;
 
-			auto start_time = next_event;
+			auto start_time = std::chrono::system_clock::now() + std::chrono::hours(20); // latest time to set charging
 			for (int s = 1; s <= max_charge_hours; ++s) start_time = std::min(start_time, find_cheapest_start(el_prices, s, next_event));
 			std::cout << "Potential start: " << date::make_zoned(date::current_zone(), start_time) << std::endl;
 			if (start_time - std::chrono::hours(1) > std::chrono::system_clock::now()) {
