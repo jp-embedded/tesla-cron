@@ -38,7 +38,7 @@
 #include <list>
 #include <iostream>
 
-//todo: set scheduled charging time to cheapest two-hour period?
+//todo:
 // Seems like scheduled charging must be set <= around 18h in the future. Otherwise it will start charging immediately.
 // Add support for time zone in icalendarlib: For example, convert this to UTC: "DTSTART;TZID=Europe/Copenhagen:20220207T060000"
 
@@ -56,7 +56,7 @@ struct vehicle_data
 		int battery_level { 0 };
 		std::string charging_state;
 		std::string scheduled_charging_mode;
-		std::chrono::time_point<std::chrono::system_clock> scheduled_charging_start_time;
+		//std::chrono::time_point<std::chrono::system_clock> scheduled_charging_start_time;
 	} charge_state;
 
 };
@@ -94,15 +94,19 @@ vehicle_data parse_vehicle_data(std::string data)
 
 	const Value &scheduled_charging_mode = charge_state["scheduled_charging_mode"]; 
 	if (!scheduled_charging_mode.IsString()) throw std::runtime_error("Unexpected scheduled_charging_mode format");
-	vd.charge_state.scheduled_charging_mode = charging_state.GetString();
+	vd.charge_state.scheduled_charging_mode = scheduled_charging_mode.GetString();
 
+        /*
 	const Value &scheduled_charging_start_time = charge_state["scheduled_charging_start_time"]; 
 	if (!scheduled_charging_start_time.IsNull()) {
 		if (!scheduled_charging_start_time.IsNumber()) throw std::runtime_error("Unexpected scheduled_charging_start_time format");
 		vd.charge_state.scheduled_charging_start_time = time_point<system_clock>(seconds(scheduled_charging_start_time.GetInt()));
-	}
 
-	//std::cout << "scheduled_charging_start_time " << vd.charge_state.scheduled_charging_start_time << std::endl;
+                // todo: convert from tesla timezone instead local zone
+                auto time_local = date::floor<date::days>(system_clock::now()) + seconds(scheduled_charging_start_time.GetInt());
+		vd.charge_state.scheduled_charging_start_time = date::make_zoned(date::current_zone(), time_local).get_sys_time();
+	}
+        */
 
 	return vd;
 }
@@ -185,6 +189,54 @@ void start_charge(std::string vin)
 			}
 			catch (...) {
 			}
+
+			return;
+		}
+		catch( error_already_set ) {
+			PyErr_Print();
+			if (--timeout == 0) throw;
+		}
+		catch (std::exception &e) {
+			std::cerr << "Error: " << e.what() << std::endl;
+			if (--timeout == 0) throw;
+		}
+		std::this_thread::sleep_for(std::chrono::minutes(1));
+	}
+}
+
+void scheduled_charging(std::string vin, date::sys_time<std::chrono::system_clock::duration> time, bool wakeup)
+{
+	using namespace boost::python;
+
+	int timeout = 10;
+	while (true) {
+		try {
+			object teslapy = import("teslapy");
+
+			object tesla = teslapy.attr("Tesla")(account.email, true, NULL, 0, 10, "tesla_cron", NULL, "/var/tmp/tesla_cron.json");
+			object authorized = tesla.attr("authorized"); 
+			if (!extract<bool>(authorized)) throw std::runtime_error("Not authorized");
+
+			object vehicles = tesla.attr("vehicle_list")();
+			int index = get_vehicle_index(vehicles, vin);
+
+                        if (wakeup) {
+                           object sync_waue_up = vehicles[index].attr("sync_wake_up")(); 
+                        }
+                        else {
+                           // return if car is sleeping
+                           object available = vehicles[index].attr("available")(); 
+                           if (!extract<bool>(available)) return;
+                        }
+
+                        // todo: zone should be tesla's time zone
+			auto time_local = date::make_zoned(date::current_zone(), time).get_local_time();
+                        auto m = std::chrono::duration_cast<std::chrono::minutes>(time_local - date::floor<date::days>(time_local));
+
+                        dict kwargs;
+                        kwargs["enable"] = true;
+                        kwargs["time"] = m.count();
+                        object ign = vehicles[index].attr("command")(*make_tuple("SCHEDULED_CHARGING"), **kwargs); 
 
 			return;
 		}
@@ -390,7 +442,7 @@ int main()
 		try {
 			std::cout << std::endl;
 			std::cout << "--- " << car.vin << " ---" << std::endl;
-			auto next_event = std::chrono::system_clock::now() + std::chrono::hours(48);
+			auto next_event = std::chrono::system_clock::now() + std::chrono::hours(20); // latest time to set charging
 			for (auto &cal : car.calendars) {
 				auto next = get_next_event(cal);
 				std::stringstream ss(next.DtStart);
@@ -407,7 +459,11 @@ int main()
 			auto start_time = next_event;
 			for (int s = 1; s <= max_charge_hours; ++s) start_time = std::min(start_time, find_cheapest_start(el_prices, s, next_event));
 			std::cout << "Potential start: " << date::make_zoned(date::current_zone(), start_time) << std::endl;
-			if (start_time > std::chrono::system_clock::now()) {
+			if (start_time - std::chrono::hours(1) > std::chrono::system_clock::now()) {
+                                // Stop waiting 1 hour before potential start, so it can be postponed if needed below before charge start.
+                                // todo: can this stop manually started charging?
+                                // force setting periodically?
+                                scheduled_charging(car.vin, start_time, false);
 				std::cout << "Wait..." << std::endl;
 				continue;
 			}
@@ -416,20 +472,20 @@ int main()
 			// wake up tesla
 			std::cout << "Wake up tesla..." << std::endl;
 			auto vd = get_vehicle_data(car.vin);
-			std::cout << "vin:      " << vd.vin << std::endl;
-			std::cout << "limit:    " << vd.charge_state.charge_limit_soc << std::endl;
-			std::cout << "level:    " << vd.charge_state.battery_level << std::endl;
-			std::cout << "state:    " << vd.charge_state.charging_state << std::endl;
+			std::cout << "Vin:             " << vd.vin << std::endl;
+			std::cout << "Limit:           " << vd.charge_state.charge_limit_soc << std::endl;
+			std::cout << "Level:           " << vd.charge_state.battery_level << std::endl;
+			std::cout << "State:           " << vd.charge_state.charging_state << std::endl;
+                        std::cout << "Scheduled mode:  " << vd.charge_state.scheduled_charging_mode << std::endl;
+                        //std::cout << "Scheduled start: " << date::make_zoned(date::current_zone(), vd.charge_state.scheduled_charging_start_time) << std::endl;
 			if (vd.charge_state.battery_level >= vd.charge_state.charge_limit_soc ) {
 				std::cout << "No need to charge" << std::endl;
 				continue;
 			}
 			else if (vd.charge_state.charging_state == "Charging") {
-				std::cout << "Already charging" << std::endl;
 				continue;
 			}
 			else if (vd.charge_state.charging_state == "Disconnected") {
-				std::cout << "Disconnected" << std::endl;
 				continue;
 			}
 
@@ -438,9 +494,11 @@ int main()
 			std::cout << "Charge hours: " << charge_hours << std::endl;
 			start_time = find_cheapest_start(el_prices, charge_hours, next_event);
 			if (start_time > std::chrono::system_clock::now()) {
+                                scheduled_charging(car.vin, start_time, true);
 				std::cout << "Wait..." << std::endl;
 				continue;
 			}
+                        // Should not be needed unless scheduled charging has failed to be set
 			std::cout << "Start charge now" << std::endl;
 			start_charge(car.vin);
 		}
