@@ -520,14 +520,15 @@ int main()
 				continue;
 			}
 
-                        // Should not be needed unless scheduled charging has failed to be set
+                        // Start charge now. If car is plugged in after scheduled start or
+			// scheduled charging somehow failed to be set
 			if (vd.charge_state.battery_level >= vd.charge_state.charge_limit_soc ) {
 				continue;
 			}
 			else if (vd.charge_state.charging_state == "Disconnected") {
 				continue;
 			}
-			std::cout << "Start charge now" << std::endl;
+			std::cout << "Start charge now..." << std::endl;
 			start_charge(car.vin);
 		}
 		catch (std::exception &e) {
