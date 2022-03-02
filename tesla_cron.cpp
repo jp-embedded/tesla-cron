@@ -277,6 +277,52 @@ void scheduled_charging(std::string vin, date::sys_time<std::chrono::system_cloc
 	}
 }
 
+void scheduled_departure(std::string vin, date::sys_time<std::chrono::system_clock::duration> start_time, date::sys_time<std::chrono::system_clock::duration> next_event)
+{
+	using namespace boost::python;
+
+	int timeout = 10;
+	while (true) {
+		try {
+			object teslapy = import("teslapy");
+
+			object tesla = teslapy.attr("Tesla")(account.email, true, NULL, 0, 10, "tesla_cron", NULL, "/var/tmp/tesla_cron.json");
+			object authorized = tesla.attr("authorized"); 
+			if (!extract<bool>(authorized)) throw std::runtime_error("Not authorized");
+
+			object vehicles = tesla.attr("vehicle_list")();
+			int index = get_vehicle_index(vehicles, vin);
+
+                        object sync_waue_up = vehicles[index].attr("sync_wake_up")(); 
+
+                        // todo: zone should be tesla's time zone
+			auto start_time_local = date::make_zoned(date::current_zone(), start_time).get_local_time();
+                        auto off_peak_m = std::chrono::duration_cast<std::chrono::minutes>(start_time_local - date::floor<date::days>(start_time_local));
+			auto next_event_local = date::make_zoned(date::current_zone(), next_event).get_local_time();
+                        auto departure_m = std::chrono::duration_cast<std::chrono::minutes>(next_event_local - date::floor<date::days>(next_event_local));
+
+                        dict kwargs;
+                        kwargs["enable"] = true;
+                        kwargs["off_peak_charging_enabled"] = true;
+                        kwargs["preconditioning_enabled"] = true;
+                        kwargs["departure_time"] = departure_m.count();
+                        kwargs["end_off_peak_time"] = off_peak_m.count();
+                        object ign = vehicles[index].attr("command")(*make_tuple("SCHEDULED_DEPARTURE"), **kwargs); 
+
+			return;
+		}
+		catch( error_already_set ) {
+			PyErr_Print();
+			if (--timeout == 0) throw;
+		}
+		catch (std::exception &e) {
+			std::cerr << "Error: " << e.what() << std::endl;
+			if (--timeout == 0) throw;
+		}
+		std::this_thread::sleep_for(std::chrono::minutes(1));
+	}
+}
+
 vehicle_data get_vehicle_data(std::string vin)
 {
 	auto data = download_vehicle_data(vin);
@@ -517,6 +563,7 @@ int main()
 			if (start_time > std::chrono::system_clock::now()) {
 				std::cout << "Schedule charging..." << std::endl;
                                 scheduled_charging(car.vin, start_time);
+                                //scheduled_departure(car.vin, start_time, next_event);
 				continue;
 			}
 
