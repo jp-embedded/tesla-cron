@@ -277,7 +277,7 @@ void scheduled_charging(std::string vin, date::sys_time<std::chrono::system_cloc
 	}
 }
 
-void scheduled_departure(std::string vin, date::sys_time<std::chrono::system_clock::duration> start_time, date::sys_time<std::chrono::system_clock::duration> next_event)
+void scheduled_departure(std::string vin, date::sys_time<std::chrono::system_clock::duration> end_off_peak_time, date::sys_time<std::chrono::system_clock::duration> next_event)
 {
 	using namespace boost::python;
 
@@ -296,8 +296,8 @@ void scheduled_departure(std::string vin, date::sys_time<std::chrono::system_clo
                         object sync_waue_up = vehicles[index].attr("sync_wake_up")(); 
 
                         // todo: zone should be tesla's time zone
-			auto start_time_local = date::make_zoned(date::current_zone(), start_time).get_local_time();
-                        auto off_peak_m = std::chrono::duration_cast<std::chrono::minutes>(start_time_local - date::floor<date::days>(start_time_local));
+			auto end_off_peak_time_local = date::make_zoned(date::current_zone(), end_off_peak_time).get_local_time();
+                        auto end_off_peak_m = std::chrono::duration_cast<std::chrono::minutes>(end_off_peak_time_local - date::floor<date::days>(end_off_peak_time_local));
 			auto next_event_local = date::make_zoned(date::current_zone(), next_event).get_local_time();
                         auto departure_m = std::chrono::duration_cast<std::chrono::minutes>(next_event_local - date::floor<date::days>(next_event_local));
 
@@ -306,7 +306,7 @@ void scheduled_departure(std::string vin, date::sys_time<std::chrono::system_clo
                         kwargs["off_peak_charging_enabled"] = true;
                         kwargs["preconditioning_enabled"] = true;
                         kwargs["departure_time"] = departure_m.count();
-                        kwargs["end_off_peak_time"] = off_peak_m.count();
+                        kwargs["end_off_peak_time"] = end_off_peak_m.count();
                         object ign = vehicles[index].attr("command")(*make_tuple("SCHEDULED_DEPARTURE"), **kwargs); 
 
 			return;
@@ -513,7 +513,7 @@ int main()
 		try {
 			std::cout << std::endl;
 			std::cout << "--- " << car.vin << " ---" << std::endl;
-			auto next_event = std::chrono::system_clock::now() + std::chrono::hours(48);
+			auto next_event = std::chrono::system_clock::now() + std::chrono::hours(20); // latest time to schedule charging
 			for (auto &cal : car.calendars) {
 				auto next = get_next_event(cal);
 				std::stringstream ss(next.DtStart);
@@ -527,14 +527,13 @@ int main()
 			std::cout << "Next event: " << date::make_zoned(date::current_zone(), next_event) << std::endl;
 			std::cout << endl;
 
-			auto start_time = std::chrono::system_clock::now() + std::chrono::hours(20); // latest time to set charging
+			auto start_time = next_event;
 			for (int s = 1; s <= max_charge_hours; ++s) start_time = std::min(start_time, find_cheapest_start(el_prices, s, next_event));
 			std::cout << "Potential start: " << date::make_zoned(date::current_zone(), start_time) << std::endl;
 			if (start_time - std::chrono::hours(1) > std::chrono::system_clock::now()) {
                                 // Stop waiting 1 hour before potential start, so it can be postponed if needed below before charge start.
 				// todo: remember potential start and skip wait if that changes
 				// if car is awake we can update the scheduled charge.
-                                //scheduled_charging(car.vin, start_time, false);
 				if (!available(car.vin)) {
 					std::cout << "Wait..." << std::endl;
 					continue;
@@ -560,10 +559,10 @@ int main()
 			int charge_hours = ((vd.charge_state.charge_limit_soc - vd.charge_state.battery_level) * max_charge_hours + 90) / 100;
 			std::cout << "Charge hours: " << charge_hours << std::endl;
 			start_time = find_cheapest_start(el_prices, charge_hours, next_event);
+                        scheduled_departure(car.vin, start_time + std::chrono::hours(charge_hours), next_event);
 			if (start_time > std::chrono::system_clock::now()) {
 				std::cout << "Schedule charging..." << std::endl;
-                                scheduled_charging(car.vin, start_time);
-                                //scheduled_departure(car.vin, start_time, next_event);
+                                //scheduled_charging(car.vin, start_time);
 				continue;
 			}
 
