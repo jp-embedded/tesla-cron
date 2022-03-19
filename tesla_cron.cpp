@@ -305,6 +305,8 @@ void scheduled_departure(std::string vin, date::sys_time<std::chrono::system_clo
                         kwargs["enable"] = true;
                         kwargs["off_peak_charging_enabled"] = true;
                         kwargs["preconditioning_enabled"] = true;
+                        kwargs["preconditioning_weekdays_only"] = true;
+                        kwargs["off_peak_charging_weekdays_only"] = false;
                         kwargs["departure_time"] = departure_m.count();
                         kwargs["end_off_peak_time"] = end_off_peak_m.count();
                         object ign = vehicles[index].attr("command")(*make_tuple("SCHEDULED_DEPARTURE"), **kwargs); 
@@ -559,7 +561,8 @@ int main()
 			int charge_hours = ((vd.charge_state.charge_limit_soc - vd.charge_state.battery_level) * max_charge_hours + 90) / 100;
 			std::cout << "Charge hours: " << charge_hours << std::endl;
 			start_time = find_cheapest_start(el_prices, charge_hours, next_event);
-                        scheduled_departure(car.vin, start_time + std::chrono::hours(charge_hours), next_event);
+                        //scheduled_departure(car.vin, start_time + std::chrono::hours(charge_hours), next_event);
+                        scheduled_departure(car.vin, next_event, next_event);
 			if (start_time > std::chrono::system_clock::now()) {
 				std::cout << "Schedule charging..." << std::endl;
                                 //scheduled_charging(car.vin, start_time);
