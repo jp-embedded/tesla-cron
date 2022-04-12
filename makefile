@@ -18,14 +18,14 @@
 #*************************************************************************/
 
 
-OBJS :=	tesla_cron.o icalendarlib/date.o icalendarlib/icalendar.o icalendarlib/types.o date/src/tz.o
-CPPFLAGS := -Wall -Wpedantic -MD -MP -O2 -I /usr/include/python3.8/ -I date/include/ 
+OBJS :=	tesla_cron.o graph.o icalendarlib/date.o icalendarlib/icalendar.o icalendarlib/types.o date/src/tz.o
+CPPFLAGS := -Wall -Wpedantic -MD -MP -O2 -I /usr/include/python3.8/ -I date/include/
 CXXFLAGS := -std=c++11
  
 all: tesla_cron
 
 tesla_cron: $(OBJS)
-	$(CXX) -o $@ $^ -lcurl -lcurlpp -lboost_python38 -lpython3.8
+	$(CXX) -o $@ $^ -lcurl -lcurlpp -lboost_python38 -lpython3.8 -lrrd
 
 install:
 	install tesla_cron /usr/local/bin/

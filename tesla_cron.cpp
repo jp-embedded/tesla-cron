@@ -18,6 +18,9 @@
  *************************************************************************/
  
 #include "icalendarlib/icalendar.h"
+#include "vehicle_data.h"
+#include "el_price.h"
+#include "graph.h"
 #include <date/date.h>
 #include <date/tz.h>
 
@@ -46,21 +49,6 @@
 #include "config.inc"
 
 const int max_charge_hours = 6;
-
-struct vehicle_data
-{
-	std::string vin;
-	struct 
-	{
-		int charge_current_request { 0 };
-		int charge_limit_soc { 0 };
-		int battery_level { 0 };
-		std::string charging_state;
-		std::string scheduled_charging_mode;
-		//std::chrono::time_point<std::chrono::system_clock> scheduled_charging_start_time;
-	} charge_state;
-
-};
 
 vehicle_data parse_vehicle_data(std::string data)
 {
@@ -153,7 +141,7 @@ std::string download_vehicle_data(std::string vin)
 			//std::cout << extract<std::string>(str(data))() << std::endl;
 			return extract<std::string>(str(data))();
 		}
-		catch( error_already_set ) {
+		catch( error_already_set &) {
 			PyErr_Print();
 			if (--timeout == 0) throw;
 		}
@@ -193,7 +181,7 @@ void start_charge(std::string vin)
 
 			return;
 		}
-		catch( error_already_set ) {
+		catch( error_already_set &) {
 			PyErr_Print();
 			if (--timeout == 0) throw;
 		}
@@ -224,7 +212,7 @@ bool available(std::string vin)
                         object available = vehicles[index].attr("available")(); 
                         return extract<bool>(available);
 		}
-		catch( error_already_set ) {
+		catch( error_already_set &) {
 			PyErr_Print();
 			if (--timeout == 0) throw;
 		}
@@ -265,7 +253,7 @@ void scheduled_charging(std::string vin, date::sys_time<std::chrono::system_cloc
 
 			return;
 		}
-		catch( error_already_set ) {
+		catch( error_already_set &) {
 			PyErr_Print();
 			if (--timeout == 0) throw;
 		}
@@ -313,7 +301,7 @@ void scheduled_departure(std::string vin, date::sys_time<std::chrono::system_clo
 
 			return;
 		}
-		catch( error_already_set ) {
+		catch( error_already_set &) {
 			PyErr_Print();
 			if (--timeout == 0) throw;
 		}
@@ -368,25 +356,16 @@ std::string download_el_prices()
 	return std::string();
 }
 
-struct price_entry
-{
-	std::chrono::time_point<std::chrono::system_clock> time;
-	float price { NAN };
-	bool operator <(const price_entry &other) { return price < other.price; }
-};
-
-typedef std::vector<price_entry> price_list;
-
 price_list parse_el_prices(std::string str)
 {
 	using namespace rapidjson;
-	std::vector<price_entry> price_list;
+	price_list prices;
 	Document doc;
 	doc.Parse(str.c_str());
 	const Value &data = doc["data"];
-	const Value &prices = data["elspotprices"];
-	if (!prices.IsArray()) throw std::runtime_error("No prices found");
-	for (auto &i : prices.GetArray()) {
+	const Value &elspotprices = data["elspotprices"];
+	if (!elspotprices.IsArray()) throw std::runtime_error("No prices found");
+	for (auto &i : elspotprices.GetArray()) {
 		const Value &time = i["HourUTC"];
 		if (!time.IsString()) throw std::runtime_error("Unexpected time format");
 		const Value &price = i["SpotPriceEUR"]; // dk price is sometimes missing
@@ -398,15 +377,15 @@ price_list parse_el_prices(std::string str)
 		ss >> date::parse("%Y-%m-%dT%H:%M:%S%0z", entry.time);
 		if (entry.time + std::chrono::hours(1) < std::chrono::system_clock::now()) continue; // skip entries from the past
 		entry.price = price.GetFloat();
-		price_list.push_back(entry);
+		prices.push_back(entry);
 	}
 
-	std::sort(price_list.begin(), price_list.end(), [](const price_entry &a, const price_entry &b){ return a.time < b.time; });
+	std::sort(prices.begin(), prices.end(), [](const price_entry &a, const price_entry &b){ return a.time < b.time; });
 
 	std::cout << "Spot prices:" << std::endl;
-	for(auto &i : price_list) std::cout << date::make_zoned(date::current_zone(), i.time) << ": " << i.price << std::endl;
+	for(auto &i : prices) std::cout << date::make_zoned(date::current_zone(), i.time) << ": " << i.price << std::endl;
 
-	return price_list;
+	return prices;
 }
 
 std::vector<price_entry> get_el_prices()
@@ -513,9 +492,11 @@ int main()
 
 	for (auto &car : account.cars) {
 		try {
+                        auto now = std::chrono::system_clock::now();
+
 			std::cout << std::endl;
 			std::cout << "--- " << car.vin << " ---" << std::endl;
-			auto next_event = std::chrono::system_clock::now() + std::chrono::hours(20); // latest time to schedule charging
+			auto next_event = now + std::chrono::hours(20); // latest time to schedule charging
 			for (auto &cal : car.calendars) {
 				auto next = get_next_event(cal);
 				std::stringstream ss(next.DtStart);
@@ -530,14 +511,21 @@ int main()
 			std::cout << endl;
 
 			auto start_time = next_event;
-			for (int s = 1; s <= max_charge_hours; ++s) start_time = std::min(start_time, find_cheapest_start(el_prices, s, next_event));
+                        int window_level_now = 0;
+			for (int s = max_charge_hours; s > 0; --s) {
+                           auto cs = find_cheapest_start(el_prices, s, next_event);
+                           start_time = std::min(start_time, cs);
+                           if (cs > now) window_level_now = max_charge_hours - s + 1;
+                        }
 			std::cout << "Potential start: " << date::make_zoned(date::current_zone(), start_time) << std::endl;
-			if (start_time - std::chrono::hours(1) > std::chrono::system_clock::now()) {
+
+			if (start_time - std::chrono::hours(1) > now) {
                                 // Stop waiting 1 hour before potential start, so it can be postponed if needed below before charge start.
 				// todo: remember potential start and skip wait if that changes
 				// if car is awake we can update the scheduled charge.
 				if (!available(car.vin)) {
 					std::cout << "Wait..." << std::endl;
+                                        graph(car.vin, *el_prices.begin(), window_level_now);
 					continue;
 				}
 			}
@@ -552,6 +540,8 @@ int main()
                         std::cout << "Scheduled mode:  " << vd.charge_state.scheduled_charging_mode << std::endl;
                         //std::cout << "Scheduled start: " << date::make_zoned(date::current_zone(), vd.charge_state.scheduled_charging_start_time) << std::endl;
 
+                        graph(car.vin, *el_prices.begin(), window_level_now, vd);
+
 			if (vd.charge_state.charging_state == "Charging") {
 				// Don't schedule while charigng. That would stop charging
 				continue;
@@ -563,7 +553,7 @@ int main()
 			start_time = find_cheapest_start(el_prices, charge_hours, next_event);
                         //scheduled_departure(car.vin, start_time + std::chrono::hours(charge_hours), next_event);
                         scheduled_departure(car.vin, next_event, next_event);
-			if (start_time > std::chrono::system_clock::now()) {
+			if (start_time > now) {
 				std::cout << "Schedule charging..." << std::endl;
                                 //scheduled_charging(car.vin, start_time);
 				continue;
@@ -579,6 +569,12 @@ int main()
 			}
 			std::cout << "Start charge now..." << std::endl;
 			start_charge(car.vin);
+
+                        // update graph with charging 
+                        auto el = *el_prices.begin();
+                        el.time += std::chrono::minutes(1); // add a minute to prevent overlap of prev graph update
+			vd = get_vehicle_data(car.vin);
+                        graph(car.vin, el, window_level_now, vd);
 		}
 		catch (std::exception &e) {
 			std::cerr << "Error: " << e.what() << std::endl;
