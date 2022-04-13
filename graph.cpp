@@ -47,7 +47,7 @@ void graph(const std::string &vin, const price_entry &price, int window_level, c
 			"RRA:AVERAGE:0.5:1m:1w"
 		};
                 const int source_count = sizeof(sources) / sizeof(sources[0]);
-		rrd_create_r(rrd_name.c_str(), 1, std::time(nullptr) - 2*60*60, source_count, sources);
+		rrd_create_r(rrd_name.c_str(), 1, std::time(nullptr), source_count, sources);
         }
 
         char charging = vd_ok ? vd.charge_state.charging_state == "Charging" ? '1' : '0' : 'U';
@@ -55,7 +55,8 @@ void graph(const std::string &vin, const price_entry &price, int window_level, c
         //note we can't graph forward. charging state is only known now
         //so graph current hour only
         std::stringstream values;
-        auto sec = std::chrono::duration_cast<std::chrono::seconds>(price.time.time_since_epoch()).count();
+	auto time = price.time + std::chrono::minutes(59); // current price last until last minute of hour
+        auto sec = std::chrono::duration_cast<std::chrono::seconds>(time.time_since_epoch()).count();
         values << sec << ":" << price.price;
         if (vd_ok) values << ":" << vd.charge_state.battery_level; else values << ":" << 'U';
         values << ":" << window_level;
