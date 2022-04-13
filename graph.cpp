@@ -31,7 +31,7 @@ bool file_exists(const std::string& name)
 	return f.good();
 }
 
-void graph(const std::string &vin, const price_entry &price, int window_level, const vehicle_data &vd)
+void graph(const std::string &vin, const price_entry &price, int window_level, date::sys_time<std::chrono::system_clock::duration> next_event, const vehicle_data &vd)
 {
         const bool vd_ok = vin == vd.vin;
 
@@ -43,6 +43,7 @@ void graph(const std::string &vin, const price_entry &price, int window_level, c
 			"DS:level:GAUGE:90m:-1000:1000",
 			"DS:window:GAUGE:90m:-1000:1000",
 			"DS:charging:GAUGE:90m:0:1",
+			"DS:event:GAUGE:90m:0:1",
 			"RRA:MAX:0.5:1m:1w",
 			"RRA:AVERAGE:0.5:1m:1w"
 		};
@@ -52,22 +53,34 @@ void graph(const std::string &vin, const price_entry &price, int window_level, c
 
         char charging = vd_ok ? vd.charge_state.charging_state == "Charging" ? '1' : '0' : 'U';
 
-        //note we can't graph forward. charging state is only known now
-        //so graph current hour only
+	auto hour_end = price.time + std::chrono::minutes(59); // current price last until last minute of hour
+        auto sec = std::chrono::duration_cast<std::chrono::seconds>(hour_end.time_since_epoch()).count();
+
+	if (next_event < hour_end) {
+		// first add an entry with no event to fill "no event" until event
+		for (int n = 0; n < 2; ++n) {
+			auto next_event_sec = std::chrono::duration_cast<std::chrono::seconds>(next_event.time_since_epoch()).count();
+			next_event_sec += (n-1) * 60;
+			std::stringstream v;
+			v << next_event_sec << ":U:U:U:U:" << n;
+				std::string v_str = v.str();
+			const char *p[] = { "rrdupdate", rrd_name.c_str(), v_str.c_str() };
+			const int p_count = sizeof(p) / sizeof(p[0]);
+			int res = rrd_update(p_count, (char**)p);
+			std::cout << "graph (" << res << ' ' << errno << ") " << v_str << std::endl;
+			rrd_clear_error();
+		}
+	}
+
         std::stringstream values;
-	auto time = price.time + std::chrono::minutes(59); // current price last until last minute of hour
-        auto sec = std::chrono::duration_cast<std::chrono::seconds>(time.time_since_epoch()).count();
         values << sec << ":" << price.price;
         if (vd_ok) values << ":" << vd.charge_state.battery_level; else values << ":" << 'U';
         values << ":" << window_level;
         values << ":" << charging;
+        values << ":" << 0;
         std::string values_str = values.str();
 
-        const char *updateparams[] = {
-           "rrdupdate",
-           rrd_name.c_str(),
-           values_str.c_str()
-        };
+        const char *updateparams[] = { "rrdupdate", rrd_name.c_str(), values_str.c_str() };
         const int param_count = sizeof(updateparams) / sizeof(updateparams[0]);
         int res = rrd_update(param_count, (char**)updateparams);
         std::cout << "graph (" << res << ' ' << errno << ") " << values_str << std::endl;

@@ -515,7 +515,7 @@ int main()
 			for (int s = max_charge_hours; s > 0; --s) {
                            auto cs = find_cheapest_start(el_prices, s, next_event);
                            start_time = std::min(start_time, cs);
-                           if (cs > now) window_level_now = max_charge_hours - s + 1;
+                           if (cs <= now) window_level_now = max_charge_hours - s + 1;
                         }
 			std::cout << "Potential start: " << date::make_zoned(date::current_zone(), start_time) << std::endl;
 
@@ -525,7 +525,7 @@ int main()
 				// if car is awake we can update the scheduled charge.
 				if (!available(car.vin)) {
 					std::cout << "Wait..." << std::endl;
-                                        graph(car.vin, *el_prices.begin(), window_level_now);
+                                        graph(car.vin, *el_prices.begin(), window_level_now, next_event);
 					continue;
 				}
 			}
@@ -540,7 +540,7 @@ int main()
                         std::cout << "Scheduled mode:  " << vd.charge_state.scheduled_charging_mode << std::endl;
                         //std::cout << "Scheduled start: " << date::make_zoned(date::current_zone(), vd.charge_state.scheduled_charging_start_time) << std::endl;
 
-                        graph(car.vin, *el_prices.begin(), window_level_now, vd);
+                        graph(car.vin, *el_prices.begin(), window_level_now, next_event, vd);
 
 			if (vd.charge_state.charging_state == "Charging") {
 				// Don't schedule while charigng. That would stop charging
@@ -574,7 +574,7 @@ int main()
                         auto el = *el_prices.begin();
                         el.time += std::chrono::minutes(1); // add a minute to prevent overlap of prev graph update
 			vd = get_vehicle_data(car.vin);
-                        graph(car.vin, el, window_level_now, vd);
+                        graph(car.vin, el, window_level_now, next_event, vd);
 		}
 		catch (std::exception &e) {
 			std::cerr << "Error: " << e.what() << std::endl;

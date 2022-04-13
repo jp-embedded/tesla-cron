@@ -24,8 +24,9 @@
 #include "el_price.h"
 
 #include <string>
+#include <date/date.h>
 
-void graph(const std::string &vin, const price_entry &price, int window_level, const vehicle_data &vd = vehicle_data());
+void graph(const std::string &vin, const price_entry &price, int window_level, date::sys_time<std::chrono::system_clock::duration> next_event, const vehicle_data &vd = vehicle_data());
 
 #endif
 
