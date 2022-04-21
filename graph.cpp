@@ -54,9 +54,24 @@ void graph(const std::string &vin, const price_entry &price, int window_level, d
         char charging = vd_ok ? vd.charge_state.charging_state == "Charging" ? '1' : '0' : 'U';
 
 	auto hour_end = price.time + std::chrono::minutes(59); // current price last until last minute of hour
-        auto sec = std::chrono::duration_cast<std::chrono::seconds>(hour_end.time_since_epoch()).count();
+        auto hour_end_sec = std::chrono::duration_cast<std::chrono::seconds>(hour_end.time_since_epoch()).count();
 
-	if (next_event < hour_end) {
+        std::stringstream values;
+        values << hour_end_sec << ":" << price.price;
+        if (vd_ok) values << ":" << vd.charge_state.battery_level; else values << ":" << 'U';
+        values << ":" << window_level;
+        values << ":" << charging;
+        values << ":" << 0;
+        std::string values_str = values.str();
+        const char *updateparams[] = { "rrdupdate", rrd_name.c_str(), values_str.c_str() };
+        const int param_count = sizeof(updateparams) / sizeof(updateparams[0]);
+        int res = rrd_update(param_count, (char**)updateparams);
+        std::cout << "graph (" << res << ' ' << errno << ") " << values_str << std::endl;
+        rrd_clear_error();
+
+	// graph next event if before next graph
+	auto next_hour_end = hour_end + std::chrono::minutes(60); 
+	if (next_event < next_hour_end) {
 		// first add an entry with no event to fill "no event" until event
 		for (int n = 0; n < 2; ++n) {
 			auto next_event_sec = std::chrono::duration_cast<std::chrono::seconds>(next_event.time_since_epoch()).count();
@@ -71,19 +86,5 @@ void graph(const std::string &vin, const price_entry &price, int window_level, d
 			rrd_clear_error();
 		}
 	}
-
-        std::stringstream values;
-        values << sec << ":" << price.price;
-        if (vd_ok) values << ":" << vd.charge_state.battery_level; else values << ":" << 'U';
-        values << ":" << window_level;
-        values << ":" << charging;
-        values << ":" << 0;
-        std::string values_str = values.str();
-
-        const char *updateparams[] = { "rrdupdate", rrd_name.c_str(), values_str.c_str() };
-        const int param_count = sizeof(updateparams) / sizeof(updateparams[0]);
-        int res = rrd_update(param_count, (char**)updateparams);
-        std::cout << "graph (" << res << ' ' << errno << ") " << values_str << std::endl;
-        rrd_clear_error();
 }
 

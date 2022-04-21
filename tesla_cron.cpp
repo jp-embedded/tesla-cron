@@ -382,6 +382,13 @@ price_list parse_el_prices(std::string str)
 
 	std::sort(prices.begin(), prices.end(), [](const price_entry &a, const price_entry &b){ return a.time < b.time; });
 
+	// Estimate additianal 4 hours after known prices to allow charge window begin there if last known price is cheap.
+	price_entry entry_est = *prices.rbegin();
+	for (int i = 0; i < 4; ++i) {
+		entry_est.time += std::chrono::hours(1);
+		prices.push_back(entry_est);
+	}
+
 	std::cout << "Spot prices:" << std::endl;
 	for(auto &i : prices) std::cout << date::make_zoned(date::current_zone(), i.time) << ": " << i.price << std::endl;
 
@@ -437,11 +444,11 @@ std::string download_calendar(std::string url)
 	return std::string();
 }
 
-Event get_next_event(std::string cal_url) 
+date::sys_time<std::chrono::system_clock::duration> get_next_event(std::string cal_url) 
 {
 	auto from = std::chrono::system_clock::now();
 	stringstream from_ss; from_ss << date::format("%Y%m%dT%H%M%S", from);
-	auto to = from + std::chrono::hours(48);
+	auto to = from + std::chrono::hours(48); // look two days ahead
 	stringstream to_ss; to_ss << date::format("%Y%m%dT%H%M%S", to);
 
 	auto cal = download_calendar(cal_url);
@@ -451,23 +458,31 @@ Event get_next_event(std::string cal_url)
 	}
 
 	ICalendar Calendar("/tmp/tesla_cron.ics");
-	Event *CurrentEvent;
 	ICalendar::Query SearchQuery(&Calendar);
 	SearchQuery.Criteria.From = from_ss.str();
 	SearchQuery.Criteria.To =   to_ss.str();
 	SearchQuery.ResetPosition();
 
-	Event found;
-	found.DtStart = SearchQuery.Criteria.To;
+	auto found = to;
 
 	std::cout << "Upcoming events:" << std::endl;
 
-	while ((CurrentEvent = SearchQuery.GetNextEvent(false)) != NULL) {
-		std::cout << "  " << CurrentEvent->DtStart.Format() << " " << CurrentEvent->Summary << std::endl;
-		if (CurrentEvent->Summary.find("[T]") == std::string::npos) continue;
-		if (CurrentEvent->DtStart < found.DtStart) {
-			found = *CurrentEvent;
-		}
+	Event *i_event;
+	while ((i_event = SearchQuery.GetNextEvent(false)) != nullptr) {
+		std::cout << "  " << i_event->DtStart.Format() << " " << i_event->Summary << std::endl;
+		if (i_event->Summary.find("[T]") == std::string::npos) continue;
+
+		// convert to chrono
+		std::stringstream ss(i_event->DtStart);
+		date::local_time<std::chrono::system_clock::duration> event_local;
+		ss >> date::parse("%Y%m%dT%H%M%S", event_local);
+		std::string tzid = i_event->DtStart.tzid.empty() ? "UTC" : i_event->DtStart.tzid;
+		auto event = date::make_zoned(tzid, event_local).get_sys_time();
+
+		// The query may return events from past because it does not handle time zones.
+		if (event < from) continue;
+
+		found = std::min(found, event);
 	}
 
 	return found;
@@ -498,12 +513,7 @@ int main()
 			std::cout << "--- " << car.vin << " ---" << std::endl;
 			auto next_event = now + std::chrono::hours(20); // latest time to schedule charging
 			for (auto &cal : car.calendars) {
-				auto next = get_next_event(cal);
-				std::stringstream ss(next.DtStart);
-				date::local_time<std::chrono::system_clock::duration> event_local;
-				ss >> date::parse("%Y%m%dT%H%M%S", event_local);
-				std::string tzid = next.DtStart.tzid.empty() ? "UTC" : next.DtStart.tzid;
-				auto event = date::make_zoned(tzid, event_local).get_sys_time();
+				auto event = get_next_event(cal);
 				next_event = std::min(next_event, event);
 
 			}
