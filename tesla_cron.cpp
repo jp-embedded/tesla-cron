@@ -550,10 +550,9 @@ int main()
                         std::cout << "Scheduled mode:  " << vd.charge_state.scheduled_charging_mode << std::endl;
                         //std::cout << "Scheduled start: " << date::make_zoned(date::current_zone(), vd.charge_state.scheduled_charging_start_time) << std::endl;
 
-                        graph(car.vin, *el_prices.begin(), window_level_now, next_event, vd);
-
 			if (vd.charge_state.charging_state == "Charging") {
 				// Don't schedule while charigng. That would stop charging
+                                graph(car.vin, *el_prices.begin(), window_level_now, next_event, vd);
 				continue;
 			}
 
@@ -565,26 +564,25 @@ int main()
                         scheduled_departure(car.vin, next_event, next_event);
 			if (start_time > now) {
 				std::cout << "Schedule charging..." << std::endl;
-                                //scheduled_charging(car.vin, start_time);
+                                graph(car.vin, *el_prices.begin(), window_level_now, next_event, vd);
 				continue;
 			}
 
                         // Start charge now. If car is plugged in after scheduled start or
 			// scheduled charging somehow failed to be set
 			if (vd.charge_state.battery_level >= vd.charge_state.charge_limit_soc ) {
+                                graph(car.vin, *el_prices.begin(), window_level_now, next_event, vd);
 				continue;
 			}
 			else if (vd.charge_state.charging_state == "Disconnected") {
+                                graph(car.vin, *el_prices.begin(), window_level_now, next_event, vd);
 				continue;
 			}
 			std::cout << "Start charge now..." << std::endl;
 			start_charge(car.vin);
 
-                        // update graph with charging 
-                        auto el = *el_prices.begin();
-                        el.time += std::chrono::minutes(1); // add a minute to prevent overlap of prev graph update
-			vd = get_vehicle_data(car.vin);
-                        graph(car.vin, el, window_level_now, next_event, vd);
+			vd = get_vehicle_data(car.vin); // update graph with charging state
+                        graph(car.vin, *el_prices.begin(), window_level_now, next_event, vd);
 		}
 		catch (std::exception &e) {
 			std::cerr << "Error: " << e.what() << std::endl;
