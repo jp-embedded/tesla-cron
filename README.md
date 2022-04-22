@@ -4,6 +4,7 @@ Sorry for the lagging documentation - to be updated some day.
 Project is just started, so code has room for improvements.  
 
 ## What?
+![](doc/graph_example.svg)
 
 tesla-cron is a linux cron job which runs each hour and starts charging of your tesla when prices are cheapest.
 
@@ -105,3 +106,9 @@ $sudo make install
 
 tesla-cron now runs at start of each hour.
 
+### Graphs
+Tesla Cron generates rrdtool data in /var/tmp/. This can be used to generate graphs like the one shown on top of this page. A script is provided for this:
+```
+$./graph.sh
+```
+If you want the graphs to be shown on a web page, there is a doc/web_example.cgi file as an example which can be used as a template for this.
