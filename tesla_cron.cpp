@@ -511,7 +511,8 @@ int main()
 
 			std::cout << std::endl;
 			std::cout << "--- " << car.vin << " ---" << std::endl;
-			auto next_event = now + std::chrono::hours(20); // latest time to schedule charging
+			auto next_event = now + std::chrono::hours(24) - std::chrono::minutes(5); // latest time to schedule charging
+			//auto next_event = el_prices.begin()->time + std::chrono::hours(24); // latest time to schedule charging
 			for (auto &cal : car.calendars) {
 				auto event = get_next_event(cal);
 				next_event = std::min(next_event, event);
