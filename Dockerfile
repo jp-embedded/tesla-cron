@@ -11,9 +11,9 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
 # Install build support stuff  
 RUN DEBIAN_FRONTEND=noninteractive apt-get -y update && DEBIAN_FRONTEND=noninteractive apt-get -y install make git
 
-# Install needed python modules
+# Install needed modules
 RUN DEBIAN_FRONTEND=noninteractive apt-get -y install build-essential libboost-all-dev libcurlpp-dev libcurl4-openssl-dev rapidjson-dev python3-pip librrd-dev
-RUN python3 -m pip install --trusted-host pypi.python.org --trusted-host files.pythonhosted.org --trusted-host pypi.org teslapy
+RUN python3 -m pip install teslapy
 
 # Build the system. This could be in a seperate docker
 RUN git clone https://github.com/jp-embedded/tesla-cron.git && cd tesla-cron && git submodule update --init --recursive
