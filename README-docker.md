@@ -1,5 +1,7 @@
 # To get a Docker build
 
+Note that the docker support is not complete yet!
+
 * Check out the code
 * Build the docker file, using `docker build . -t tesla-cron`
 * Obtain a Tesla refresh token for your account. This can be generated at eg TeslaFi or the Tesla Access Token Generator chrome extension.
