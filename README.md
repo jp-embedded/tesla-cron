@@ -4,10 +4,13 @@ Sorry for the lagging documentation - to be updated some day.
 Project is just started, so code has room for improvements.  
 
 ## What?
+![](doc/graph_example.svg)
 
 tesla-cron is a linux cron job which runs each hour and starts charging of your tesla when prices are cheapest.
 
 - Can be configured with google calendar/ical links to ensure tesla is charged before next calender event with a "[T]" tag in the title.
+- Tesla Cron set the car's "scheduled departure" to match the next calendar event. This ensures the Tesla will charge even if Tesla Cron or the car goes offline.
+- Tesla Cron will not overrule and stop charging if you start charging manually, so you can still use the Tesla App as before.
 - Currently hardcoded for prices at "DK2" zone (which is in denmark)
 - Tesla is only woken up when charging is possibly started.
 
@@ -105,3 +108,9 @@ $sudo make install
 
 tesla-cron now runs at start of each hour.
 
+### Graphs
+Tesla Cron generates rrdtool data in /var/tmp/. This can be used to generate graphs like the one shown on top of this page. A script is provided for this:
+```
+$./graph.sh
+```
+If you want the graphs to be shown on a web page, there is a doc/web_example.cgi file as an example which can be used as a template for this.
