@@ -53,7 +53,7 @@ void graph(const std::string &vin, const price_entry &price, int window_level, d
 
         char charging = vd_ok ? vd.charge_state.charging_state == "Charging" ? '1' : '0' : 'U';
 
-	auto hour_end = price.time + std::chrono::minutes(59); // current price last until last minute of hour
+	auto hour_end = price.time + std::chrono::minutes(60); // current price last until next hour
         auto hour_end_sec = std::chrono::duration_cast<std::chrono::seconds>(hour_end.time_since_epoch()).count();
 
         std::stringstream values;
@@ -71,10 +71,11 @@ void graph(const std::string &vin, const price_entry &price, int window_level, d
 
 	// graph next event if before next graph
 	auto next_hour_end = hour_end + std::chrono::minutes(60); 
-	if (next_event < next_hour_end) {
+	auto next_event_end = next_event + std::chrono::minutes(1);
+	if (next_event_end < next_hour_end) {
 		// first add an entry with no event to fill "no event" until event
 		for (int n = 0; n < 2; ++n) {
-			auto next_event_sec = std::chrono::duration_cast<std::chrono::seconds>(next_event.time_since_epoch()).count();
+			auto next_event_sec = std::chrono::duration_cast<std::chrono::seconds>(next_event_end.time_since_epoch()).count();
 			next_event_sec += (n-1) * 60;
 			std::stringstream v;
 			v << next_event_sec << ":U:U:U:U:" << n;

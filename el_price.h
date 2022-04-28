@@ -28,7 +28,7 @@ struct price_entry
 {
 	std::chrono::time_point<std::chrono::system_clock> time;
 	float price { NAN };
-	bool operator <(const price_entry &other) { return price < other.price; }
+	bool operator <(const price_entry &other) { return time < other.time; }
 };
 
 typedef std::vector<price_entry> price_list;

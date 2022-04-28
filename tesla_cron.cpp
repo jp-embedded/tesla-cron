@@ -375,12 +375,11 @@ price_list parse_el_prices(std::string str)
 		price_entry entry;
 		std::stringstream ss(time.GetString());
 		ss >> date::parse("%Y-%m-%dT%H:%M:%S%0z", entry.time);
-		if (entry.time + std::chrono::hours(1) < std::chrono::system_clock::now()) continue; // skip entries from the past
 		entry.price = price.GetFloat();
 		prices.push_back(entry);
 	}
 
-	std::sort(prices.begin(), prices.end(), [](const price_entry &a, const price_entry &b){ return a.time < b.time; });
+	std::sort(prices.begin(), prices.end());
 
 	// Estimate additianal 4 hours after known prices to allow charge window begin there if last known price is cheap.
 	price_entry entry_est = *prices.rbegin();
@@ -401,24 +400,25 @@ std::vector<price_entry> get_el_prices()
 	return parse_el_prices(data);
 }
 
-std::chrono::time_point<std::chrono::system_clock> find_cheapest_start(const price_list &prices, int hours, const std::chrono::time_point<std::chrono::system_clock> &limit)
+std::chrono::time_point<std::chrono::system_clock> find_cheapest_start(const price_list &prices, int hours, const std::chrono::time_point<std::chrono::system_clock> &start, const std::chrono::time_point<std::chrono::system_clock> &stop)
 {
-	if (hours < 1) return limit;
-	if (prices.size() < 2) return limit - std::chrono::hours(hours);
-	price_list::const_iterator found_start = prices.begin();
+	if (hours < 1) return stop; // return stop on 0 hours - no need to charge
+	if (prices.size() < 2) return stop - std::chrono::hours(hours); // nothing to compare with < two prices
+	auto found_start = stop - std::chrono::hours(hours); // keep window before stop if no seq is found (stop - start < hours)
 	float found_price_sum = std::numeric_limits<float>::max();
 	for (price_list::const_iterator i_beg = prices.begin(); i_beg != prices.end(); ++i_beg) {
-		if (std::distance(i_beg, prices.end()) < hours) break;
-		if ((i_beg + hours - 1)->time >= limit) break;
+		if (std::distance(i_beg, prices.end()) < hours) break;      // stop if out of known hours
+		//if ((i_beg + hours - 1)->time >= stop) break;             // stop if seq ends after stop
+		if (i_beg->time + std::chrono::hours(hours) > stop) break;  // stop if seq ends after stop
+		if (i_beg->time + std::chrono::hours(1) <= start) continue; // skip if first hour ends before start
 		float price_sum = 0;
 		for (price_list::const_iterator i_seq = i_beg; i_seq != i_beg + hours; ++i_seq) price_sum += i_seq->price;
 		if (price_sum < found_price_sum) {
 			found_price_sum = price_sum;
-			found_start = i_beg;
+			found_start = i_beg->time;
 		}
 	}
-	std::cout << "Cheapest " << hours << "h seq: " << date::make_zoned(date::current_zone(), found_start->time) << std::endl;
-	return found_start->time;
+	return found_start;
 }
 
 std::string download_calendar(std::string url)
@@ -446,7 +446,7 @@ std::string download_calendar(std::string url)
 
 date::sys_time<std::chrono::system_clock::duration> get_next_event(std::string cal_url) 
 {
-	auto from = std::chrono::system_clock::now();
+	auto from = std::chrono::system_clock::now(); // todo pass as parameter
 	stringstream from_ss; from_ss << date::format("%Y%m%dT%H%M%S", from);
 	auto to = from + std::chrono::hours(48); // look two days ahead
 	stringstream to_ss; to_ss << date::format("%Y%m%dT%H%M%S", to);
@@ -492,27 +492,27 @@ int main()
 {
 	Py_Initialize();
 
+	auto now = std::chrono::system_clock::now();
+
 	std::vector<price_entry> el_prices;
+	auto el_price_now = el_prices.end();
 	try {
 		el_prices = get_el_prices();
-		if (el_prices.size() > 0) {
-			auto min = std::min_element(el_prices.begin(), el_prices.end());
-			auto max = std::max_element(el_prices.begin(), el_prices.end());
-			std::cout << "min: " << min->price << "  max: " << max->price << std::endl;
-		}
+		el_price_now = std::find_if(el_prices.begin(), el_prices.end(), 
+				[&now](const price_entry &a) { return (a.time + std::chrono::hours(1)) > now; });
+		if (el_price_now == el_prices.end()) throw runtime_error("No current el price");
 	}
 	catch (std::exception &e) {
 		std::cerr << "Error: " << e.what() << std::endl;
+		return 0;
 	}
 
 	for (auto &car : account.cars) {
 		try {
-                        auto now = std::chrono::system_clock::now();
 
 			std::cout << std::endl;
 			std::cout << "--- " << car.vin << " ---" << std::endl;
 			auto next_event = now + std::chrono::hours(24) - std::chrono::minutes(5); // latest time to schedule charging
-			//auto next_event = el_prices.begin()->time + std::chrono::hours(24); // latest time to schedule charging
 			for (auto &cal : car.calendars) {
 				auto event = get_next_event(cal);
 				next_event = std::min(next_event, event);
@@ -523,11 +523,26 @@ int main()
 
 			auto start_time = next_event;
                         int window_level_now = 0;
-			for (int s = max_charge_hours; s > 0; --s) {
-                           auto cs = find_cheapest_start(el_prices, s, next_event);
-                           start_time = std::min(start_time, cs);
-                           if (cs <= now) window_level_now = max_charge_hours - s + 1;
-                        }
+			for (int hours = max_charge_hours; hours > 0; --hours) {
+				auto cs = find_cheapest_start(el_prices, hours, now, next_event);
+				std::cout << "Cheapest " << hours << "h seq: " << date::make_zoned(date::current_zone(), cs) << std::endl;
+				start_time = std::min(start_time, cs);
+				if (cs <= now) window_level_now = max_charge_hours - hours + 1;
+			}
+
+			// extend earlier window to fill its actual length in graph
+			for (int hours = 2; hours <= max_charge_hours - window_level_now; ++hours) {
+				for (int offset = 1; offset < hours; ++offset) {
+					auto cs = find_cheapest_start(el_prices, hours, now - std::chrono::hours(offset), next_event); // todo past el prices
+					if (cs <= now) {
+						std::cout << "window (" << hours << ',' << offset << ") " << window_level_now;
+						window_level_now = max_charge_hours - hours + 1;
+						std::cout << " -> " << window_level_now << std::endl;
+						break;
+					}
+				}
+			}
+
 			std::cout << "Potential start: " << date::make_zoned(date::current_zone(), start_time) << std::endl;
 
 			if (start_time - std::chrono::hours(1) > now) {
@@ -536,7 +551,7 @@ int main()
 				// if car is awake we can update the scheduled charge.
 				if (!available(car.vin)) {
 					std::cout << "Wait..." << std::endl;
-                                        graph(car.vin, *el_prices.begin(), window_level_now, next_event);
+                                        graph(car.vin, *el_price_now, window_level_now, next_event);
 					continue;
 				}
 			}
@@ -553,37 +568,40 @@ int main()
 
 			if (vd.charge_state.charging_state == "Charging") {
 				// Don't schedule while charigng. That would stop charging
-                                graph(car.vin, *el_prices.begin(), window_level_now, next_event, vd);
+                                graph(car.vin, *el_price_now, window_level_now, next_event, vd);
 				continue;
 			}
 
 			// +90 is for rounding up. Result should not exceed max_charge_hours since its not included in previous guess
 			int charge_hours = ((vd.charge_state.charge_limit_soc - vd.charge_state.battery_level) * max_charge_hours + 90) / 100;
 			std::cout << "Charge hours: " << charge_hours << std::endl;
-			start_time = find_cheapest_start(el_prices, charge_hours, next_event);
+			start_time = find_cheapest_start(el_prices, charge_hours, now, next_event);
                         //scheduled_departure(car.vin, start_time + std::chrono::hours(charge_hours), next_event);
-                        scheduled_departure(car.vin, next_event, next_event);
+			// off peak must be set AFTER scheduled departure. Otherwise the car starts when plugged in. Possibly a bug in current tesla sw
+			auto off_peak = next_event + std::chrono::hours(1);
+                        scheduled_departure(car.vin, off_peak, next_event);
 			if (start_time > now) {
 				std::cout << "Schedule charging..." << std::endl;
-                                graph(car.vin, *el_prices.begin(), window_level_now, next_event, vd);
+                                graph(car.vin, *el_price_now, window_level_now, next_event, vd);
 				continue;
 			}
 
                         // Start charge now. If car is plugged in after scheduled start or
 			// scheduled charging somehow failed to be set
-			if (vd.charge_state.battery_level >= vd.charge_state.charge_limit_soc ) {
-                                graph(car.vin, *el_prices.begin(), window_level_now, next_event, vd);
+			// dont start charge if level is less than 1% from charge limit
+			if ((vd.charge_state.charge_limit_soc - vd.charge_state.battery_level) <= 1) {
+                                graph(car.vin, *el_price_now, window_level_now, next_event, vd);
 				continue;
 			}
 			else if (vd.charge_state.charging_state == "Disconnected") {
-                                graph(car.vin, *el_prices.begin(), window_level_now, next_event, vd);
+                                graph(car.vin, *el_price_now, window_level_now, next_event, vd);
 				continue;
 			}
 			std::cout << "Start charge now..." << std::endl;
 			start_charge(car.vin);
 
 			vd = get_vehicle_data(car.vin); // update graph with charging state
-                        graph(car.vin, *el_prices.begin(), window_level_now, next_event, vd);
+                        graph(car.vin, *el_price_now, window_level_now, next_event, vd);
 		}
 		catch (std::exception &e) {
 			std::cerr << "Error: " << e.what() << std::endl;
