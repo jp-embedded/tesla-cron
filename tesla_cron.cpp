@@ -531,9 +531,10 @@ int main()
 			}
 
 			// extend earlier window to fill its actual length in graph
+			// todo: consider earlier events also to prevent extending window past those.
 			for (int hours = 2; hours <= max_charge_hours - window_level_now; ++hours) {
 				for (int offset = 1; offset < hours; ++offset) {
-					auto cs = find_cheapest_start(el_prices, hours, now - std::chrono::hours(offset), next_event); // todo past el prices
+					auto cs = find_cheapest_start(el_prices, hours, now - std::chrono::hours(offset), next_event);
 					if (cs <= now) {
 						std::cout << "window (" << hours << ',' << offset << ") " << window_level_now;
 						window_level_now = max_charge_hours - hours + 1;
@@ -600,7 +601,8 @@ int main()
 			std::cout << "Start charge now..." << std::endl;
 			start_charge(car.vin);
 
-			vd = get_vehicle_data(car.vin); // update graph with charging state
+			std::this_thread::sleep_for(std::chrono::minutes(1));   // give car time to start before get data
+			vd = get_vehicle_data(car.vin); 			// update graph with charging state
                         graph(car.vin, *el_price_now, window_level_now, next_event, vd);
 		}
 		catch (std::exception &e) {
