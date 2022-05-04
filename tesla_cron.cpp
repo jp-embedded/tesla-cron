@@ -578,9 +578,8 @@ int main()
 			std::cout << "Charge hours: " << charge_hours << std::endl;
 			start_time = find_cheapest_start(el_prices, charge_hours, now, next_event);
                         //scheduled_departure(car.vin, start_time + std::chrono::hours(charge_hours), next_event);
-			// off peak must be set AFTER scheduled departure. Otherwise the car starts when plugged in. Possibly a bug in current tesla sw
-			auto off_peak = next_event + std::chrono::hours(1);
-                        scheduled_departure(car.vin, off_peak, next_event);
+			// off peak must be set at scheduled departure. Otherwise the car starts when plugged in. Possibly a bug in current tesla sw
+                        scheduled_departure(car.vin, next_event, next_event);
 			if (start_time > now) {
 				std::cout << "Schedule charging..." << std::endl;
                                 graph(car.vin, *el_price_now, window_level_now, next_event, vd);
