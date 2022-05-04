@@ -293,7 +293,7 @@ void scheduled_departure(std::string vin, date::sys_time<std::chrono::system_clo
                         kwargs["enable"] = true;
                         kwargs["off_peak_charging_enabled"] = true;
                         kwargs["preconditioning_enabled"] = true;
-                        kwargs["preconditioning_weekdays_only"] = true;
+                        kwargs["preconditioning_weekdays_only"] = false;
                         kwargs["off_peak_charging_weekdays_only"] = false;
                         kwargs["departure_time"] = departure_m.count();
                         kwargs["end_off_peak_time"] = end_off_peak_m.count();
