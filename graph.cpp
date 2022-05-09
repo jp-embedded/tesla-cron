@@ -66,7 +66,7 @@ void graph(const std::string &vin, const price_entry &price, int window_level, d
         const char *updateparams[] = { "rrdupdate", rrd_name.c_str(), values_str.c_str() };
         const int param_count = sizeof(updateparams) / sizeof(updateparams[0]);
         int res = rrd_update(param_count, (char**)updateparams);
-        std::cout << "graph (" << res << ' ' << errno << ") " << values_str << std::endl;
+        //std::cout << "graph (" << res << ' ' << errno << ") " << values_str << std::endl;
         rrd_clear_error();
 
 	// graph next event if before next graph
@@ -83,7 +83,7 @@ void graph(const std::string &vin, const price_entry &price, int window_level, d
 			const char *p[] = { "rrdupdate", rrd_name.c_str(), v_str.c_str() };
 			const int p_count = sizeof(p) / sizeof(p[0]);
 			int res = rrd_update(p_count, (char**)p);
-			std::cout << "graph (" << res << ' ' << errno << ") " << v_str << std::endl;
+			//std::cout << "graph (" << res << ' ' << errno << ") " << v_str << std::endl;
 			rrd_clear_error();
 		}
 	}
