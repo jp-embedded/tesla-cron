@@ -10,7 +10,7 @@ tesla-cron is a linux cron job which runs each hour and starts charging of your 
 
 - Can be configured with google calendar/ical links to ensure tesla is charged before next calender event with a "[T]" tag in the title.
 - Tesla Cron set the car's "Precontitioning" and "scheduled charging" to match the next calendar event. This ensures the Tesla will charge even if Tesla Cron or the car goes offline.
-- Tesla Cron will not overrule and stop charging if you start charging manually, so you can still use the Tesla App as before.
+- Tesla Cron will not overrule and stop charging if you start charging manually, so you can still use the Tesla App as before to eg start charging manually.
 - Currently hardcoded for prices at "DK2" zone (which is in denmark)
 - Tesla is only woken up when charging is possibly started.
 
