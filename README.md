@@ -6,7 +6,7 @@ Project is just started, so code has room for improvements.
 ## What?
 ![](doc/graph_example.svg)
 
-tesla-cron is a linux cron job which runs each hour and starts charging of your tesla when prices are cheapest.
+tesla-cron is a linux cron job which runs each hour and starts charging of your tesla when prices are cheapest before your next calendar event.
 
 - Can be configured with google calendar/ical links to ensure tesla is charged before next calender event with a "[T]" tag in the title.
 - Tesla Cron set the car's "Precontitioning" and "scheduled charging" to match the next calendar event. This ensures the Tesla will charge even if Tesla Cron or the car goes offline.
