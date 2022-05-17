@@ -583,11 +583,14 @@ int main()
 				continue;
 			}
 
-			// +90 is for rounding up. Result should not exceed max_charge_hours since its not included in previous guess
-			int charge_hours = ((vd.charge_state.charge_limit_soc - vd.charge_state.battery_level) * max_charge_hours + 90) / 100;
+			// +1 is for rounding up. Result should be from 1 to max_charge_hours since those are included in previous guess.
+                        // max_charge_hours+1 is possible but unlikely (requires 0% level & 100% limit). Also charging at least 1h 
+                        // ensures scheduled charging is set 1h before event at latest, which reduces the maximum window after the event 
+                        // to 5h where charging will start when plugged in.
+			int charge_hours = (vd.charge_state.charge_limit_soc - vd.charge_state.battery_level) * max_charge_hours / 100 + 1;
 			start_time = find_cheapest_start(el_prices, charge_hours, now, next_event);
 
-                        // Seems like scheduled charging must be set <= around 18h in the future. Otherwise it will start charging immediately.
+                        // Scheduled charging must be set < 18h in the future. Otherwise it will start charging immediately.
                         start_time = std::min(start_time, now + std::chrono::hours(24 - max_charge_hours));
 
 			std::cout << "Charge start:    " << charge_hours << "h at " << date::make_zoned(date::current_zone(), start_time) << std::endl;
@@ -600,13 +603,13 @@ int main()
                            scheduled_departure(car.vin, next_event, next_event);
                         }
 
-                        // Start charge now if start time passed. If car is plugged in after scheduled start or
-			// scheduled charging somehow failed to be set
-			// dont start charge if level is less than 1% from charge limit
+                        // Start charge now if start time passed. If scheduled charging somehow failed to be set
+                        // Should normally not be needed.
 			if (start_time > now) {
                                 graph(car.vin, *el_price_now, window_level_now, next_event, vd);
 				continue;
 			}
+			// dont start charge if level is less than 1% from charge limit
 			if ((vd.charge_state.charge_limit_soc - vd.charge_state.battery_level) <= 1) {
                                 graph(car.vin, *el_price_now, window_level_now, next_event, vd);
 				continue;
