@@ -576,11 +576,11 @@ int main()
 
 			// wake up tesla
 			auto vd = get_vehicle_data(car.vin);
-			std::cout << "Vin:             " << vd.vin << std::endl;
-			std::cout << "Limit:           " << vd.charge_state.charge_limit_soc << std::endl;
-			std::cout << "Level:           " << vd.charge_state.battery_level << std::endl;
-			std::cout << "State:           " << vd.charge_state.charging_state << std::endl;
-                        std::cout << "Scheduled mode:  " << vd.charge_state.scheduled_charging_mode << std::endl;
+			std::cout << "Vin:              " << vd.vin << std::endl;
+			std::cout << "Limit:            " << vd.charge_state.charge_limit_soc << std::endl;
+			std::cout << "Level:            " << vd.charge_state.battery_level << std::endl;
+			std::cout << "State:            " << vd.charge_state.charging_state << std::endl;
+                        std::cout << "Scheduled mode:   " << vd.charge_state.scheduled_charging_mode << std::endl;
                         //std::cout << "Scheduled start: " << date::make_zoned(date::current_zone(), vd.charge_state.scheduled_charging_start_time) << std::endl;
 
 			if (vd.charge_state.charging_state == "Charging") {
@@ -599,11 +599,14 @@ int main()
                         // Scheduled charging must be set < 18h in the future. Otherwise it will start charging immediately.
                         start_time = std::min(start_time, now + std::chrono::hours(24 - max_charge_hours));
 
-			std::cout << "Charge start:    " << charge_hours << "h at " << date::make_zoned(date::current_zone(), start_time) << std::endl;
+			std::cout << "Charge start:     " << charge_hours << "h at " << date::make_zoned(date::current_zone(), start_time) << std::endl;
                         if (use_scheduled_charging) {
-                           scheduled_charging(car.vin, std::max(start_time, next_event - std::chrono::hours(max_charge_hours)), next_event);
+                           auto t = std::max(start_time, next_event - std::chrono::hours(max_charge_hours));
+                           std::cout << "Scheduled charge: " << date::make_zoned(date::current_zone(), t) << std::endl;
+                           scheduled_charging(car.vin, t, next_event);
                         }
                         else {
+                           std::cout << "Scheduled depart: " << date::make_zoned(date::current_zone(), next_event) << std::endl;
                            // off peak must be set at scheduled departure. Otherwise the car starts when plugged in. Possibly a bug in current tesla sw
                            //scheduled_departure(car.vin, start_time + std::chrono::hours(charge_hours), next_event);
                            scheduled_departure(car.vin, next_event, next_event);
