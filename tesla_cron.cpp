@@ -658,7 +658,7 @@ int main()
 			std::cout << "Limit:            " << vd.charge_state.charge_limit_soc << std::endl;
 			std::cout << "Level:            " << vd.charge_state.battery_level << std::endl;
 			std::cout << "State:            " << vd.charge_state.charging_state << std::endl;
-			std::cout << "Area:            " << area << " (" << vd.drive_state.loc.lat() << ", " << vd.drive_state.loc.lon() << ")" << std::endl;
+			std::cout << "Area:             " << area << " (" << vd.drive_state.loc.lat() << ", " << vd.drive_state.loc.lon() << ")" << std::endl;
                         std::cout << "Scheduled mode:   " << vd.charge_state.scheduled_charging_mode << std::endl;
                         //std::cout << "Scheduled start: " << date::make_zoned(date::current_zone(), vd.charge_state.scheduled_charging_start_time) << std::endl;
 
