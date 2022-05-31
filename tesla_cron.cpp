@@ -44,7 +44,9 @@
 
 #include "config.inc"
 
-constexpr bool use_scheduled_charging = true; // true = use scheduled charging, false = use scheduled departure
+
+constexpr bool use_scheduled_charging = false; // true = use scheduled charging, false = use scheduled departure
+
 const int max_charge_hours = 6;
 
 std::string get_area(const location& loc)
@@ -339,15 +341,21 @@ void scheduled_departure(std::string vin, date::sys_time<std::chrono::system_clo
 			auto next_event_local = date::make_zoned(date::current_zone(), next_event).get_local_time();
                         auto departure_m = std::chrono::duration_cast<std::chrono::minutes>(next_event_local - date::floor<date::days>(next_event_local));
 
-                        dict kwargs;
-                        kwargs["enable"] = true;
-                        kwargs["off_peak_charging_enabled"] = true;
-                        kwargs["preconditioning_enabled"] = true;
-                        kwargs["preconditioning_weekdays_only"] = false;
-                        kwargs["off_peak_charging_weekdays_only"] = false;
-                        kwargs["departure_time"] = departure_m.count();
-                        kwargs["end_off_peak_time"] = end_off_peak_m.count();
-                        object ign = vehicles[index].attr("command")(*make_tuple("SCHEDULED_DEPARTURE"), **kwargs); 
+                        // Ensure scheduled charging is disabled
+                        dict kwargs_sc;
+                        kwargs_sc["enable"] = false;
+                        kwargs_sc["time"] = departure_m.count();
+                        object ign_sc = vehicles[index].attr("command")(*make_tuple("SCHEDULED_CHARGING"), **kwargs_sc); 
+
+                        dict kwargs_sd;
+                        kwargs_sd["enable"] = true;
+                        kwargs_sd["off_peak_charging_enabled"] = true;
+                        kwargs_sd["preconditioning_enabled"] = true;
+                        kwargs_sd["preconditioning_weekdays_only"] = false;
+                        kwargs_sd["off_peak_charging_weekdays_only"] = false;
+                        kwargs_sd["departure_time"] = departure_m.count();
+                        kwargs_sd["end_off_peak_time"] = end_off_peak_m.count();
+                        object ign = vehicles[index].attr("command")(*make_tuple("SCHEDULED_DEPARTURE"), **kwargs_sd); 
 
 			return;
 		}
@@ -646,12 +654,12 @@ int main()
 
 			// wake up tesla
 			auto vd = get_vehicle_data(car.vin);
-			std::cout << "Vin:             " << vd.vin << std::endl;
-			std::cout << "Limit:           " << vd.charge_state.charge_limit_soc << std::endl;
-			std::cout << "Level:           " << vd.charge_state.battery_level << std::endl;
-			std::cout << "State:           " << vd.charge_state.charging_state << std::endl;
+			std::cout << "Vin:              " << vd.vin << std::endl;
+			std::cout << "Limit:            " << vd.charge_state.charge_limit_soc << std::endl;
+			std::cout << "Level:            " << vd.charge_state.battery_level << std::endl;
+			std::cout << "State:            " << vd.charge_state.charging_state << std::endl;
 			std::cout << "Area:            " << area << " (" << vd.drive_state.loc.lat() << ", " << vd.drive_state.loc.lon() << ")" << std::endl;
-                        std::cout << "Scheduled mode:  " << vd.charge_state.scheduled_charging_mode << std::endl;
+                        std::cout << "Scheduled mode:   " << vd.charge_state.scheduled_charging_mode << std::endl;
                         //std::cout << "Scheduled start: " << date::make_zoned(date::current_zone(), vd.charge_state.scheduled_charging_start_time) << std::endl;
 
 			if (vd.charge_state.charging_state == "Charging") {
@@ -660,30 +668,35 @@ int main()
 				continue;
 			}
 
-			// +90 is for rounding up. Result should not exceed max_charge_hours since its not included in previous guess
-			int charge_hours = ((vd.charge_state.charge_limit_soc - vd.charge_state.battery_level) * max_charge_hours + 90) / 100;
+			// +1 is for rounding up. Result should be from 1 to max_charge_hours since those are included in previous guess.
+                        // max_charge_hours+1 is possible but unlikely (requires 0% level & 100% limit). Also charging at least 1h 
+                        // ensures scheduled charging is set 1h before event at latest, which reduces the maximum window after the event 
+                        // to 5h where charging will start when plugged in.
+			int charge_hours = (vd.charge_state.charge_limit_soc - vd.charge_state.battery_level) * max_charge_hours / 100 + 1;
 			start_time = find_cheapest_start(el_prices, charge_hours, now, next_event);
 
-                        // Seems like scheduled charging must be set <= around 18h in the future. Otherwise it will start charging immediately.
-                        start_time = std::min(start_time, now + std::chrono::hours(24 - max_charge_hours));
-
-			std::cout << "Charge start:    " << charge_hours << "h at " << date::make_zoned(date::current_zone(), start_time) << std::endl;
+			std::cout << "Charge start:     " << charge_hours << "h at " << date::make_zoned(date::current_zone(), start_time) << std::endl;
                         if (use_scheduled_charging) {
-                           scheduled_charging(car.vin, start_time, next_event);
+                           // Scheduled charging must be set < 18h in the future. Otherwise it will start charging immediately.
+                           start_time = std::min(start_time, now + std::chrono::hours(24 - max_charge_hours));
+
+                           auto t = std::max(start_time, next_event - std::chrono::hours(max_charge_hours));
+                           std::cout << "Scheduled charge: " << date::make_zoned(date::current_zone(), t) << std::endl;
+                           scheduled_charging(car.vin, t, next_event);
                         }
                         else {
+                           std::cout << "Scheduled depart: " << date::make_zoned(date::current_zone(), next_event) << std::endl;
                            // off peak must be set at scheduled departure. Otherwise the car starts when plugged in. Possibly a bug in current tesla sw
                            //scheduled_departure(car.vin, start_time + std::chrono::hours(charge_hours), next_event);
                            scheduled_departure(car.vin, next_event, next_event);
                         }
 
-                        // Start charge now if start time passed. If car is plugged in after scheduled start or
-			// scheduled charging somehow failed to be set
-			// dont start charge if level is less than 1% from charge limit
+                        // Start charge now if start time passed.
 			if (start_time > now) {
                                 graph(car.vin, *el_price_now, window_level_now, next_event, vd);
 				continue;
 			}
+			// dont start charge if level is less than 1% from charge limit
 			if ((vd.charge_state.charge_limit_soc - vd.charge_state.battery_level) <= 1) {
                                 graph(car.vin, *el_price_now, window_level_now, next_event, vd);
 				continue;
