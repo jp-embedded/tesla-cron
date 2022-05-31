@@ -16,25 +16,27 @@
  ** You should have received a copy of the GNU General Public License 
  ** along with tesla-cron. If not, see <https://www.gnu.org/licenses/>.
  *************************************************************************/
+ 
+#ifndef __LOCATION_H
+#define __LOCATION_H
 
-#ifndef __EL_PRICE_H
-#define __EL_PRICE_H
-
-#include <vector>
-#include <map>
-#include <chrono>
 #include <cmath>
 
-struct price_entry
+class location
 {
-	std::chrono::time_point<std::chrono::system_clock> time;
-	float price { NAN };
-	bool operator <(const price_entry &other) { return time < other.time; }
+	public:
+	location() : m_lat(NAN), m_lon(NAN) {}
+	location(double lat, double lon) : m_lat(lat), m_lon(lon) {}
+
+	double lat() const { return m_lat; }
+	double lon() const { return m_lon; }
+
+	protected:
+	double m_lat;
+	double m_lon;
 };
 
-typedef std::vector<price_entry> price_list;
-typedef std::map<std::string, price_list> price_map;
+double distance(const location& a, const location& b);
 
 #endif
-
 

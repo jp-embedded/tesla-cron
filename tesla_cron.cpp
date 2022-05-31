@@ -21,6 +21,7 @@
 #include "vehicle_data.h"
 #include "el_price.h"
 #include "graph.h"
+#include "location.h"
 #include <date/date.h>
 #include <date/tz.h>
 
@@ -43,11 +44,38 @@
 
 #include "config.inc"
 
-
 constexpr bool use_scheduled_charging = true; // true = use scheduled charging, false = use scheduled departure
-
-
 const int max_charge_hours = 6;
+
+std::string get_area(const location& loc)
+{
+	// todo: use reverse geocode to lookup country
+	struct location_entry
+	{
+		location loc;
+		std::string area;
+	} location_map[] = {
+		{{55.306978, 10.805645}, "DK1"},  // Nyborg
+		{{55.357423, 11.117698}, "DK2"},  // Halsskov
+
+		{{56.036168, 12.612033}, "DK2"},  // Helsingoer
+		{{56.044742, 12.698100}, "SE4"},  // Helsingborg
+
+		{{55.613038, 12.664738}, "DK2"},  // Dragoer
+		{{55.566806, 12.901627}, "SE4"},  // Limhamn
+
+		{{57.398749, 14.682311}, "SE3"},  // Approximation. Where is the exact SE3/SE4 zone?
+		{{57.391515, 14.680349}, "SE4"},  // Approximation. Where is the exact SE3/SE4 zone?
+	};
+
+	location_entry found = location_map[0];
+	for (auto& l : location_map) {
+		if (distance(loc, l.loc) < distance(loc, found.loc)) {
+			found = l;
+		}
+	}
+	return found.area;
+}
 
 vehicle_data parse_vehicle_data(std::string data)
 {
@@ -83,6 +111,15 @@ vehicle_data parse_vehicle_data(std::string data)
 	const Value &scheduled_charging_mode = charge_state["scheduled_charging_mode"]; 
 	if (!scheduled_charging_mode.IsString()) throw std::runtime_error("Unexpected scheduled_charging_mode format");
 	vd.charge_state.scheduled_charging_mode = scheduled_charging_mode.GetString();
+
+	const Value &drive_state = doc["drive_state"];
+
+	const Value &latitude = drive_state["latitude"]; 
+	if (!latitude.IsNumber()) throw std::runtime_error("Unexpected latitude format");
+
+	const Value &longitude = drive_state["longitude"]; 
+	if (!longitude.IsNumber()) throw std::runtime_error("Unexpected longitude format");
+	vd.drive_state.loc = {latitude.GetDouble(), longitude.GetDouble()};
 
         /*
 	const Value &scheduled_charging_start_time = charge_state["scheduled_charging_start_time"]; 
@@ -326,11 +363,38 @@ void scheduled_departure(std::string vin, date::sys_time<std::chrono::system_clo
 	}
 }
 
+void save_vehicle_data(std::string vin, std::string data)
+{
+	std::string f_path = "/var/tmp";
+	std::string f_name = f_path + "/tesla-" + vin + ".cache";
+	std::ofstream f(f_name);
+	f << data;
+}
+
+std::string load_vehicle_data(std::string vin)
+{
+	std::string f_path = "/var/tmp";
+	std::string f_name = f_path + "/tesla-" + vin + ".cache";
+	std::ifstream f(f_name);
+	std::stringstream d;
+	d << f.rdbuf();
+	return d.str();
+}
+
 vehicle_data get_vehicle_data(std::string vin)
 {
 	auto data = download_vehicle_data(vin);
+	save_vehicle_data(vin, data);
 	return parse_vehicle_data(data);
 }
+
+vehicle_data get_vehicle_data_from_cache(std::string vin)
+{
+	auto data = load_vehicle_data(vin);
+	if (data.empty()) data = download_vehicle_data(vin); // need to get from car if cache is empty
+	return parse_vehicle_data(data);
+}
+
 
 
 std::string download_el_prices()
@@ -339,7 +403,7 @@ std::string download_el_prices()
 	while (true) {
 		try {
 			std::string url = "https://data-api.energidataservice.dk/v1/graphql";
-			std::string body = "{\"query\": \"{ elspotprices (where:{PriceArea:{_eq:\\\"DK2\\\"}},order_by:{HourUTC:desc},limit:100,offset:0)  { HourUTC,SpotPriceDKK,SpotPriceEUR }}\"}";
+			std::string body = "{\"query\": \"{ elspotprices (order_by:{HourUTC:desc},limit:500,offset:0)  { HourUTC,PriceArea,SpotPriceEUR }}\"}";
 
 			std::list<std::string> header;
 			header.push_back("Content-Type: application/json");
@@ -369,10 +433,10 @@ std::string download_el_prices()
 	return std::string();
 }
 
-price_list parse_el_prices(std::string str)
+price_map parse_el_prices(std::string str)
 {
 	using namespace rapidjson;
-	price_list prices;
+	price_map prices;
 	Document doc;
 	doc.Parse(str.c_str());
 	const Value &data = doc["data"];
@@ -381,33 +445,40 @@ price_list parse_el_prices(std::string str)
 	for (auto &i : elspotprices.GetArray()) {
 		const Value &time = i["HourUTC"];
 		if (!time.IsString()) throw std::runtime_error("Unexpected time format");
-		const Value &price = i["SpotPriceEUR"]; // dk price is sometimes missing
-		if (price.IsNull()) continue; // some entries contains null price. Skip those
+		const Value &price = i["SpotPriceEUR"];
+		if (price.IsNull()) continue; // some entries contains null price. Skip those. (or non EUR prices only?)
 	 	if (!price.IsNumber()) throw std::runtime_error("Unexpected price format");
+		const Value &area = i["PriceArea"];
+		if (!area.IsString()) throw std::runtime_error("Unexpected area format");
 
 		price_entry entry;
 		std::stringstream ss(time.GetString());
 		ss >> date::parse("%Y-%m-%dT%H:%M:%S%0z", entry.time);
 		entry.price = price.GetFloat();
-		prices.push_back(entry);
+		prices[area.GetString()].push_back(entry);
 	}
 
-	std::sort(prices.begin(), prices.end());
+	for (auto& p : prices) std::sort(p.second.begin(), p.second.end());
 
 	// Estimate additianal 4 hours after known prices to allow charge window begin there if last known price is cheap.
-	price_entry entry_est = *prices.rbegin();
-	for (int i = 0; i < 4; ++i) {
-		entry_est.time += std::chrono::hours(1);
-		prices.push_back(entry_est);
+	for (auto& p : prices) {
+		price_entry entry_est = *p.second.rbegin();
+		for (int i = 0; i < 4; ++i) {
+			entry_est.time += std::chrono::hours(1);
+			p.second.push_back(entry_est);
+		}
 	}
 
-	std::cout << "Spot prices:" << std::endl;
-	for(auto &i : prices) std::cout << date::make_zoned(date::current_zone(), i.time) << ": " << i.price << std::endl;
+	for (auto& p : prices) {
+		std::cout << "Spot prices (" << p.first << "):" << std::endl;
+		for(auto &i : p.second) std::cout << date::make_zoned(date::current_zone(), i.time) << ": " << i.price << std::endl;
+		std::cout << std::endl;
+	}
 
 	return prices;
 }
 
-std::vector<price_entry> get_el_prices()
+price_map get_el_prices()
 {
 	auto data = download_el_prices();
 	return parse_el_prices(data);
@@ -507,13 +578,9 @@ int main()
 
 	auto now = std::chrono::system_clock::now();
 
-	std::vector<price_entry> el_prices;
-	auto el_price_now = el_prices.end();
+	price_map el_prices_all;
 	try {
-		el_prices = get_el_prices();
-		el_price_now = std::find_if(el_prices.begin(), el_prices.end(), 
-				[&now](const price_entry &a) { return (a.time + std::chrono::hours(1)) > now; });
-		if (el_price_now == el_prices.end()) throw runtime_error("No current el price");
+		el_prices_all = get_el_prices();
 	}
 	catch (std::exception &e) {
 		std::cerr << "Error: " << e.what() << std::endl;
@@ -533,6 +600,15 @@ int main()
 			}
 			std::cout << "Next event: " << date::make_zoned(date::current_zone(), next_event) << std::endl;
 			std::cout << endl;
+
+			auto vd_cached = get_vehicle_data_from_cache(car.vin);
+			auto area = get_area(vd_cached.drive_state.loc);
+
+			// Get prices from latest known area
+			price_list el_prices = el_prices_all[area];
+			auto el_price_now = std::find_if(el_prices.begin(), el_prices.end(), 
+					[&now](const price_entry &a) { return (a.time + std::chrono::hours(1)) > now; });
+			if (el_price_now == el_prices.end()) throw runtime_error("No current el price");
 
 			auto start_time = next_event;
                         int window_level_now = 0;
@@ -574,6 +650,7 @@ int main()
 			std::cout << "Limit:           " << vd.charge_state.charge_limit_soc << std::endl;
 			std::cout << "Level:           " << vd.charge_state.battery_level << std::endl;
 			std::cout << "State:           " << vd.charge_state.charging_state << std::endl;
+			std::cout << "Area:            " << area << " (" << vd.drive_state.loc.lat() << ", " << vd.drive_state.loc.lon() << ")" << std::endl;
                         std::cout << "Scheduled mode:  " << vd.charge_state.scheduled_charging_mode << std::endl;
                         //std::cout << "Scheduled start: " << date::make_zoned(date::current_zone(), vd.charge_state.scheduled_charging_start_time) << std::endl;
 

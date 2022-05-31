@@ -17,24 +17,26 @@
  ** along with tesla-cron. If not, see <https://www.gnu.org/licenses/>.
  *************************************************************************/
 
-#ifndef __EL_PRICE_H
-#define __EL_PRICE_H
+#include "location.h"
 
-#include <vector>
-#include <map>
-#include <chrono>
-#include <cmath>
+namespace {
 
-struct price_entry
+constexpr double pi() { return std::atan(1)*4; }
+double deg2rad(double deg) { return deg * (pi()/180); }
+
+}
+
+double distance(const location& a, const location& b)
 {
-	std::chrono::time_point<std::chrono::system_clock> time;
-	float price { NAN };
-	bool operator <(const price_entry &other) { return time < other.time; }
-};
-
-typedef std::vector<price_entry> price_list;
-typedef std::map<std::string, price_list> price_map;
-
-#endif
-
+	double R = 6371; // Radius of the earth in km
+	double dLat = deg2rad(b.lat()-a.lat());  // deg2rad below
+	double dLon = deg2rad(b.lon()-a.lon()); 
+	double t = 
+		sin(dLat/2) * sin(dLat/2) +
+		cos(deg2rad(a.lat())) * cos(deg2rad(b.lat())) * 
+		sin(dLon/2) * sin(dLon/2); 
+	double c = 2 * atan2(sqrt(t), sqrt(1-t)); 
+	double d = R * c; // Distance in km
+	return d;
+}
 

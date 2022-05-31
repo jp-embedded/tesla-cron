@@ -18,7 +18,7 @@
 #*************************************************************************/
 
 
-OBJS :=	tesla_cron.o graph.o icalendarlib/date.o icalendarlib/icalendar.o icalendarlib/types.o date/src/tz.o
+OBJS :=	tesla_cron.o graph.o location.o icalendarlib/date.o icalendarlib/icalendar.o icalendarlib/types.o date/src/tz.o
 CPPFLAGS := -Wall -Wpedantic -MD -MP -O2 -I /usr/include/python3.8/ -I date/include/
 CXXFLAGS := -std=c++11
  

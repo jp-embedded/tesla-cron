@@ -20,7 +20,9 @@
 #ifndef __VEHICLE_DATA_H
 #define __VEHICLE_DATA_H
 
+#include "location.h"
 #include <string>
+#include <cmath>
 
 struct vehicle_data
 {
@@ -34,6 +36,10 @@ struct vehicle_data
 		std::string scheduled_charging_mode;
 		//std::chrono::time_point<std::chrono::system_clock> scheduled_charging_start_time;
 	} charge_state;
+	struct
+	{
+		location loc;
+	} drive_state;
 
 };
 
