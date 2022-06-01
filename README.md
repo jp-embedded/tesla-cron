@@ -22,7 +22,7 @@ Tested on Ubuntu 20.04 LTS.
 
 ```
 $sudo apt install build-essential libboost-all-dev libcurlpp-dev libcurl4-openssl-dev rapidjson-dev python3-pip librrd-dev
-$sudo python3 -m pip install teslapy
+$sudo python3 -m pip install teslapy reverse_geocoder
 ```
 
 ### Configuring
