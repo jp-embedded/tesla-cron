@@ -22,6 +22,8 @@
 #include "el_price.h"
 #include "graph.h"
 #include "location.h"
+#include "ReverseGeocode.hpp"
+
 #include <date/date.h>
 #include <date/tz.h>
 
@@ -49,30 +51,27 @@ constexpr bool use_scheduled_charging = false; // true = use scheduled charging,
 
 const int max_charge_hours = 6;
 
-std::string get_area(const location& loc)
+std::string get_area(const std::string& country, const location& loc)
 {
-	// todo: use reverse geocode to lookup country
 	struct location_entry
 	{
 		location loc;
+		std::string country;
 		std::string area;
 	} location_map[] = {
-		{{55.306978, 10.805645}, "DK1"},  // Nyborg
-		{{55.357423, 11.117698}, "DK2"},  // Halsskov
+		{{55.306978, 10.805645}, "DK", "DK1"},  // Nyborg
+		{{55.357423, 11.117698}, "DK", "DK2"},  // Halsskov
 
-		{{56.036168, 12.612033}, "DK2"},  // Helsingoer
-		{{56.044742, 12.698100}, "SE4"},  // Helsingborg
+		{{57.398749, 14.682311}, "SE", "SE3"},  // Approximation. Where is the exact SE3/SE4 zone?
+		{{57.391515, 14.680349}, "SE", "SE4"},  // Approximation. Where is the exact SE3/SE4 zone?
 
-		{{55.613038, 12.664738}, "DK2"},  // Dragoer
-		{{55.566806, 12.901627}, "SE4"},  // Limhamn
-
-		{{57.398749, 14.682311}, "SE3"},  // Approximation. Where is the exact SE3/SE4 zone?
-		{{57.391515, 14.680349}, "SE4"},  // Approximation. Where is the exact SE3/SE4 zone?
+		{{00.000000, 00.000000}, "NO", "NO2"},  // Only one zone for norway?
 	};
 
 	location_entry found = location_map[0];
 	for (auto& l : location_map) {
-		if (distance(loc, l.loc) < distance(loc, found.loc)) {
+                if (l.country != country) continue;
+		if (found.area.empty() || distance(loc, l.loc) < distance(loc, found.loc)) {
 			found = l;
 		}
 	}
@@ -609,8 +608,14 @@ int main()
 			std::cout << "Next event: " << date::make_zoned(date::current_zone(), next_event) << std::endl;
 			std::cout << endl;
 
+                        ReverseGeocode geo;
 			auto vd_cached = get_vehicle_data_from_cache(car.vin);
-			auto area = get_area(vd_cached.drive_state.loc);
+                        auto geoloc = geo.search(vd_cached.drive_state.loc.lat(), vd_cached.drive_state.loc.lon());
+                        if (geoloc.size() != 1) throw runtime_error("No location found");
+                        std::string country = geoloc[0]["cc"];
+                        std::string loc_name = geoloc[0]["name"];
+			auto area = get_area(country, vd_cached.drive_state.loc);
+			std::cout << "Location:         " << country << '/' << area << ' ' << loc_name << " (" << vd_cached.drive_state.loc.lat() << ", " << vd_cached.drive_state.loc.lon() << ")" << std::endl;
 
 			// Get prices from latest known area
 			price_list el_prices = el_prices_all[area];
@@ -622,13 +627,13 @@ int main()
                         int window_level_now = 0;
 			for (int hours = max_charge_hours; hours > 0; --hours) {
 				auto cs = find_cheapest_start(el_prices, hours, now, next_event);
-				std::cout << "Cheapest " << hours << "h seq: " << date::make_zoned(date::current_zone(), cs) << std::endl;
+				std::cout << "Cheapest " << hours << "h seq:  " << date::make_zoned(date::current_zone(), cs) << std::endl;
 				start_time = std::min(start_time, cs);
 				if (cs <= now) window_level_now = max_charge_hours - hours + 1;
 			}
 
 			// extend earlier window to fill its actual length in graph
-			// todo: consider earlier events also to prevent extending window past those.
+			// todo: consider earlier events also to prevent extending window past those. Or look into graph data instead.
 			for (int hours = 2; hours <= max_charge_hours - window_level_now; ++hours) {
 				for (int offset = 1; offset < hours; ++offset) {
 					auto cs = find_cheapest_start(el_prices, hours, now - std::chrono::hours(offset), next_event);
@@ -658,7 +663,6 @@ int main()
 			std::cout << "Limit:            " << vd.charge_state.charge_limit_soc << std::endl;
 			std::cout << "Level:            " << vd.charge_state.battery_level << std::endl;
 			std::cout << "State:            " << vd.charge_state.charging_state << std::endl;
-			std::cout << "Area:             " << area << " (" << vd.drive_state.loc.lat() << ", " << vd.drive_state.loc.lon() << ")" << std::endl;
                         std::cout << "Scheduled mode:   " << vd.charge_state.scheduled_charging_mode << std::endl;
                         //std::cout << "Scheduled start: " << date::make_zoned(date::current_zone(), vd.charge_state.scheduled_charging_start_time) << std::endl;
 
