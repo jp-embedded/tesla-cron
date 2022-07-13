@@ -409,18 +409,11 @@ std::string download_el_prices()
 	int timeout = 10;
 	while (true) {
 		try {
-			std::string url = "https://data-api.energidataservice.dk/v1/graphql";
-			std::string body = "{\"query\": \"{ elspotprices (order_by:{HourUTC:desc},limit:500,offset:0)  { HourUTC,PriceArea,SpotPriceEUR }}\"}";
-
-			std::list<std::string> header;
-			header.push_back("Content-Type: application/json");
+			std::string url = "https://api.energidataservice.dk/v2/dataset/Elspotprices?limit=500";
 
 			curlpp::Cleanup clean;
 			curlpp::Easy r;
 			r.setOpt(new curlpp::options::Url(url));
-			r.setOpt(new curlpp::options::HttpHeader(header));
-			r.setOpt(new curlpp::options::PostFields(body));
-			r.setOpt(new curlpp::options::PostFieldSize(body.length()));
 
 			std::ostringstream response;
 			r.setOpt(new curlpp::options::WriteStream(&response));
@@ -446,8 +439,7 @@ price_map parse_el_prices(std::string str)
 	price_map prices;
 	Document doc;
 	doc.Parse(str.c_str());
-	const Value &data = doc["data"];
-	const Value &elspotprices = data["elspotprices"];
+	const Value &elspotprices = doc["records"];
 	if (!elspotprices.IsArray()) throw std::runtime_error("No prices found");
 	for (auto &i : elspotprices.GetArray()) {
 		const Value &time = i["HourUTC"];
@@ -460,7 +452,7 @@ price_map parse_el_prices(std::string str)
 
 		price_entry entry;
 		std::stringstream ss(time.GetString());
-		ss >> date::parse("%Y-%m-%dT%H:%M:%S%0z", entry.time);
+		ss >> date::parse("%Y-%m-%dT%H:%M:%S", entry.time);
 		entry.price = price.GetFloat();
 		prices[area.GetString()].push_back(entry);
 	}
