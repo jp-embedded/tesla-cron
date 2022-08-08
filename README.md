@@ -5,6 +5,7 @@ Project is just started, so code has room for improvements.
 
 ## What?
 ![](doc/graph_example.svg)
+![](doc/calendar_example.png)
 
 tesla-cron is a linux cron job which runs each hour and starts charging of your tesla when prices are cheapest before your next calendar event.
 
