@@ -577,8 +577,6 @@ int main()
 {
 	Py_Initialize();
 
-	auto now = std::chrono::system_clock::now();
-
 	price_map el_prices_all;
 	try {
 		el_prices_all = get_el_prices();
@@ -590,10 +588,11 @@ int main()
 
 	for (auto &car : account.cars) {
 		try {
+			auto now = std::chrono::system_clock::now();
 
 			std::cout << std::endl;
 			std::cout << "--- " << car.vin << " ---" << std::endl;
-			auto next_event = now + std::chrono::hours(24) - std::chrono::minutes(5); // latest time to schedule charging
+			auto next_event = now + std::chrono::hours(24) - std::chrono::minutes(15); // latest time to schedule charging
 			for (auto &cal : car.calendars) {
 				auto event = get_next_event(cal);
 				next_event = std::min(next_event, event);
