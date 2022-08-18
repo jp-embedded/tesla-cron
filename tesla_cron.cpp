@@ -106,8 +106,10 @@ vehicle_data parse_vehicle_data(std::string data)
 	vd.charge_state.battery_level = battery_level.GetInt();
 
 	const Value &charging_state = charge_state["charging_state"]; 
-	if (!charging_state.IsString()) throw std::runtime_error("Unexpected charging_state format");
-	vd.charge_state.charging_state = charging_state.GetString();
+	if (!charging_state.IsNull()) { // Can be null after eg a software upgrade
+		if (!charging_state.IsString()) throw std::runtime_error("Unexpected charging_state format");
+		vd.charge_state.charging_state = charging_state.GetString();
+	}
 
 	const Value &scheduled_charging_mode = charge_state["scheduled_charging_mode"]; 
 	if (!scheduled_charging_mode.IsString()) throw std::runtime_error("Unexpected scheduled_charging_mode format");
@@ -663,6 +665,11 @@ int main()
                                 graph(car.vin, *el_price_now, window_level_now, next_event, vd);
 				continue;
 			}
+			else if (vd.charge_state.charging_state == "Disconnected") {
+				// Don't schedule if car is disconnected / potentiallay moving. Tesla will remember by location
+                                graph(car.vin, *el_price_now, window_level_now, next_event, vd);
+				continue;
+			}
 
 			// +1 is for rounding up. Result should be from 1 to max_charge_hours since those are included in previous guess.
                         // max_charge_hours+1 is possible but unlikely (requires 0% level & 100% limit). Also charging at least 1h 
@@ -694,10 +701,6 @@ int main()
 			}
 			// dont start charge if level is less than 1% from charge limit
 			if ((vd.charge_state.charge_limit_soc - vd.charge_state.battery_level) <= 1) {
-                                graph(car.vin, *el_price_now, window_level_now, next_event, vd);
-				continue;
-			}
-			else if (vd.charge_state.charging_state == "Disconnected") {
                                 graph(car.vin, *el_price_now, window_level_now, next_event, vd);
 				continue;
 			}
