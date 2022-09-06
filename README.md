@@ -35,7 +35,7 @@ Generate an access token. This can be generated at eg TeslaFi or the Tesla Acces
 $python3 auth.py
 ```
 ### Carnot
-If you want to use carnot for future price predictions, add an account at carnot.dk to generate an apikey. Add this apikey co config.inc. Carnot will try to predict prices about a weak ahead. Without Carnot, future prices are known for only about a day ahead.
+If you want to use carnot for future price predictions, create an account at carnot.dk to generate an apikey. Add this apikey co config.inc. Carnot will try to predict prices about a weak ahead. Without Carnot, future prices are known for only about a day ahead.
 
 ### Building & testing
 
