@@ -13,6 +13,7 @@ tesla-cron is a linux cron job which runs each hour and starts charging of your 
 - Tesla Cron will not overrule and stop charging if you start charging manually, so you can still use the Tesla App as before to eg start charging manually.
 - Currently works in area DK1/DK2/SE3/SE3/NO2 (Denmark/Sweden/Norway)
 - Tesla is only woken up when charging is possibly started.
+- Tesla Cron automatically uses prices from the corret area, based on the car's location.
 - Supports carnot.dk, which tries to predict future prices beyond the known next day prices (for DK1 & DK2 area) for even better charge start estimation.
 
 ## How
