@@ -39,6 +39,7 @@ struct vehicle_data
 	struct
 	{
 		location loc;
+                bool moving;
 	} drive_state;
 
 };

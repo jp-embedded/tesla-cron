@@ -124,6 +124,9 @@ vehicle_data parse_vehicle_data(std::string data)
 	if (!longitude.IsNumber()) throw std::runtime_error("Unexpected longitude format");
 	vd.drive_state.loc = {latitude.GetDouble(), longitude.GetDouble()};
 
+	const Value &speed = drive_state["speed"]; 
+	vd.drive_state.moving = !speed.IsNull();
+
         /*
 	const Value &scheduled_charging_start_time = charge_state["scheduled_charging_start_time"]; 
 	if (!scheduled_charging_start_time.IsNull()) {
@@ -766,6 +769,7 @@ int main()
 			std::cout << "Level:            " << vd.charge_state.battery_level << std::endl;
 			std::cout << "State:            " << vd.charge_state.charging_state << std::endl;
                         std::cout << "Scheduled mode:   " << vd.charge_state.scheduled_charging_mode << std::endl;
+                        std::cout << "Moving:           " << vd.drive_state.moving << std::endl;
                         //std::cout << "Scheduled start: " << date::make_zoned(date::current_zone(), vd.charge_state.scheduled_charging_start_time) << std::endl;
 
 			if (vd.charge_state.charging_state == "Charging") {
@@ -773,8 +777,8 @@ int main()
                                 graph(car.vin, *el_price_now, window_level_now, next_event, vd);
 				continue;
 			}
-			else if (vd.charge_state.charging_state == "Disconnected") {
-				// Don't schedule if car is disconnected / potentiallay moving. Tesla will remember by location
+			else if (vd.drive_state.moving) {
+				// Don't schedule if car is moving. Tesla will remember by location
                                 graph(car.vin, *el_price_now, window_level_now, next_event, vd);
 				continue;
 			}
