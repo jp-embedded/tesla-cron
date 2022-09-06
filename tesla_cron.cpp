@@ -406,7 +406,7 @@ vehicle_data get_vehicle_data_from_cache(std::string vin)
 
 
 
-std::string download_el_prices()
+std::string download_el_prices_energidataservice()
 {
 	int timeout = 10;
 	while (true) {
@@ -435,19 +435,57 @@ std::string download_el_prices()
 	return std::string();
 }
 
-price_map parse_el_prices(std::string str)
+std::string download_el_prices_carnot(std::string region)
+{
+	int timeout = 10;
+	while (true) {
+		try {
+			std::string url = "https://whale-app-dquqw.ondigitalocean.app/openapi/get_predict?energysource=spotprice&region=" + region + "&daysahead=7";
+
+			curlpp::Cleanup clean;
+			curlpp::Easy r;
+			r.setOpt(new curlpp::options::Url(url));
+
+                        std::list<std::string> headers;
+                        headers.push_back("accept: application/json");
+                        headers.push_back("apikey: " + account.carnot_apikey);
+                        headers.push_back("username: " + account.email);
+                        r.setOpt(new curlpp::options::HttpHeader(headers));
+
+			std::ostringstream response;
+			r.setOpt(new curlpp::options::WriteStream(&response));
+
+			r.perform();
+			std::string response_str = response.str();
+			if (response_str.size() == 0) throw std::runtime_error("No prices from server");
+				
+			return response_str;
+		}
+		catch (std::exception &e) {
+			std::cerr << "Error: " << e.what() << std::endl;
+			if (--timeout == 0) throw;
+		}
+		std::this_thread::sleep_for(std::chrono::minutes(1));
+	}
+	return std::string();
+}
+
+std::pair<price_map, float> parse_el_prices_energidataservice(std::string str)
 {
 	using namespace rapidjson;
 	price_map prices;
+
 	Document doc;
 	doc.Parse(str.c_str());
+        if (!doc.HasMember("records")) return {prices, NAN};
 	const Value &elspotprices = doc["records"];
 	if (!elspotprices.IsArray()) throw std::runtime_error("No prices found");
+	std::chrono::time_point<std::chrono::system_clock> last_time;
+        float dk_eur { NAN };
 	for (auto &i : elspotprices.GetArray()) {
 		const Value &time = i["HourUTC"];
 		if (!time.IsString()) throw std::runtime_error("Unexpected time format");
 		const Value &price = i["SpotPriceEUR"];
-		if (price.IsNull()) continue; // some entries contains null price. Skip those. (or non EUR prices only?)
 	 	if (!price.IsNumber()) throw std::runtime_error("Unexpected price format");
 		const Value &area = i["PriceArea"];
 		if (!area.IsString()) throw std::runtime_error("Unexpected area format");
@@ -457,32 +495,98 @@ price_map parse_el_prices(std::string str)
 		ss >> date::parse("%Y-%m-%dT%H:%M:%S", entry.time);
 		entry.price = price.GetFloat();
 		prices[area.GetString()].push_back(entry);
+
+                // Save latest dk/eur exchange value for carnot
+		const Value &dkprice = i["SpotPriceDKK"];
+		if (!dkprice.IsNull()) { // some entries contains null price. Skip those.
+                   if (entry.time > last_time) {
+                      if (!dkprice.IsNumber()) throw std::runtime_error("Unexpected dkprice format");
+                      dk_eur = dkprice.GetFloat() / entry.price;
+                      last_time = entry.time;
+                   }
+                }
 	}
 
 	for (auto& p : prices) std::sort(p.second.begin(), p.second.end());
 
-	// Estimate additianal 4 hours after known prices to allow charge window begin there if last known price is cheap.
-	for (auto& p : prices) {
-		price_entry entry_est = *p.second.rbegin();
-		for (int i = 0; i < 4; ++i) {
-			entry_est.time += std::chrono::hours(1);
-			p.second.push_back(entry_est);
-		}
+	return {prices, dk_eur};
+}
+
+price_map parse_el_prices_carnot(std::string str, float dk_eur)
+{
+	using namespace rapidjson;
+	price_map prices;
+
+	Document doc;
+	doc.Parse(str.c_str());
+        if (!doc.HasMember("predictions")) return prices;
+	const Value &elspotprices = doc["predictions"];
+	if (!elspotprices.IsArray()) throw std::runtime_error("No prices found");
+	for (auto &i : elspotprices.GetArray()) {
+		const Value &v_time = i["utctime"];
+		if (!v_time.IsString()) throw std::runtime_error("Unexpected time format");
+		const Value &v_price = i["prediction"];
+	 	if (!v_price.IsNumber()) throw std::runtime_error("Unexpected price format");
+		const Value &v_area = i["pricearea"];
+		if (!v_area.IsString()) throw std::runtime_error("Unexpected area format");
+
+                std::string area = v_area.GetString();
+                std::transform(area.begin(), area.end(), area.begin(), ::toupper);
+
+		price_entry entry;
+		std::stringstream ss(v_time.GetString());
+		ss >> date::parse("%Y-%m-%dT%H:%M:%S", entry.time);
+		entry.price = v_price.GetFloat() / dk_eur;
+
+		prices[area].push_back(entry);
 	}
 
-	for (auto& p : prices) {
-		std::cout << "Spot prices (" << p.first << "):" << std::endl;
-		for(auto &i : p.second) std::cout << date::make_zoned(date::current_zone(), i.time) << ": " << i.price << std::endl;
-		std::cout << std::endl;
-	}
+	for (auto& p : prices) std::sort(p.second.begin(), p.second.end());
 
 	return prices;
 }
 
+std::pair<price_map, float> get_el_prices_energidataservice()
+{
+	auto data = download_el_prices_energidataservice();
+	return parse_el_prices_energidataservice(data);
+}
+
+price_map get_el_prices_carnot(float dk_eur)
+{
+	auto data_dk1 = download_el_prices_carnot("dk1");
+	auto data_dk2 = download_el_prices_carnot("dk2");
+	auto data0 = parse_el_prices_carnot(data_dk1, dk_eur);
+	auto data1 = parse_el_prices_carnot(data_dk2, dk_eur);
+        data0.insert(data1.begin(), data1.end());
+        return data0;
+}
+
 price_map get_el_prices()
 {
-	auto data = download_el_prices();
-	return parse_el_prices(data);
+   auto prices = get_el_prices_energidataservice();
+   
+   if(!account.carnot_apikey.empty()) {
+      auto prices_carnot = get_el_prices_carnot(prices.second);
+      if (prices_carnot.empty()) std::cout << "Error: Empty reply from Carnot." << std::endl;
+      for (auto& p : prices.first) {
+         auto c = prices_carnot.find(p.first);
+         if (c != prices_carnot.end()) {
+            // Merge Carnot prices
+            for (auto& e : c->second) if (e > *p.second.rbegin()) p.second.push_back(e);
+         }
+         else {
+            // No Carnot. just add additianal 4 hours after known prices to allow charge window begin there if last known price is cheap.
+            price_entry entry_est = *p.second.rbegin();
+            for (int i = 0; i < 4; ++i) {
+               entry_est.time += std::chrono::hours(1);
+               p.second.push_back(entry_est);
+            }
+         }
+      }
+   }
+
+   return prices.first;
 }
 
 std::chrono::time_point<std::chrono::system_clock> find_cheapest_start(const price_list &prices, int hours, const std::chrono::time_point<std::chrono::system_clock> &start, const std::chrono::time_point<std::chrono::system_clock> &stop)
@@ -616,6 +720,9 @@ int main()
 					[&now](const price_entry &a) { return (a.time + std::chrono::hours(1)) > now; });
 			if (el_price_now == el_prices.end()) throw runtime_error("No current el price");
 
+                        std::cout << "Spot prices (" << area << "):" << std::endl;
+                        for(auto &i : el_prices) std::cout << date::make_zoned(date::current_zone(), i.time) << ": " << i.price << std::endl; std::cout << std::endl;
+
 			auto start_time = next_event;
                         int window_level_now = 0;
 			for (int hours = max_charge_hours; hours > 0; --hours) {
@@ -625,6 +732,7 @@ int main()
 				if (cs <= now) window_level_now = max_charge_hours - hours + 1;
 			}
 
+#if 0
 			// extend earlier window to fill its actual length in graph
 			// todo: consider earlier events also to prevent extending window past those. Or look into graph data instead.
 			for (int hours = 2; hours <= max_charge_hours - window_level_now; ++hours) {
@@ -638,6 +746,7 @@ int main()
 					}
 				}
 			}
+#endif
 
 			if (start_time - std::chrono::hours(1) > now) {
                                 // Stop waiting 1 hour before potential start, so it can be postponed if needed below before charge start.
