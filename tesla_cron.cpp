@@ -411,66 +411,44 @@ vehicle_data get_vehicle_data_from_cache(std::string vin)
 
 std::string download_el_prices_energidataservice()
 {
-	int timeout = 10;
-	while (true) {
-		try {
-			std::string url = "https://api.energidataservice.dk/v2/dataset/Elspotprices?limit=500";
+   std::string url = "https://api.energidataservice.dk/v2/dataset/Elspotprices?limit=500";
 
-			curlpp::Cleanup clean;
-			curlpp::Easy r;
-			r.setOpt(new curlpp::options::Url(url));
+   curlpp::Cleanup clean;
+   curlpp::Easy r;
+   r.setOpt(new curlpp::options::Url(url));
 
-			std::ostringstream response;
-			r.setOpt(new curlpp::options::WriteStream(&response));
+   std::ostringstream response;
+   r.setOpt(new curlpp::options::WriteStream(&response));
 
-			r.perform();
-			std::string response_str = response.str();
-			if (response_str.size() == 0) throw std::runtime_error("No prices from server");
-				
-			return response_str;
-		}
-		catch (std::exception &e) {
-			std::cerr << "Error: " << e.what() << std::endl;
-			if (--timeout == 0) throw;
-		}
-		std::this_thread::sleep_for(std::chrono::minutes(1));
-	}
-	return std::string();
+   r.perform();
+   std::string response_str = response.str();
+   if (response_str.size() == 0) throw std::runtime_error("No prices from server");
+
+   return response_str;
 }
 
 std::string download_el_prices_carnot(std::string region)
 {
-	int timeout = 10;
-	while (true) {
-		try {
-			std::string url = "https://whale-app-dquqw.ondigitalocean.app/openapi/get_predict?energysource=spotprice&region=" + region + "&daysahead=7";
+   std::string url = "https://whale-app-dquqw.ondigitalocean.app/openapi/get_predict?energysource=spotprice&region=" + region + "&daysahead=7";
 
-			curlpp::Cleanup clean;
-			curlpp::Easy r;
-			r.setOpt(new curlpp::options::Url(url));
+   curlpp::Cleanup clean;
+   curlpp::Easy r;
+   r.setOpt(new curlpp::options::Url(url));
 
-                        std::list<std::string> headers;
-                        headers.push_back("accept: application/json");
-                        headers.push_back("apikey: " + account.carnot_apikey);
-                        headers.push_back("username: " + account.email);
-                        r.setOpt(new curlpp::options::HttpHeader(headers));
+   std::list<std::string> headers;
+   headers.push_back("accept: application/json");
+   headers.push_back("apikey: " + account.carnot_apikey);
+   headers.push_back("username: " + account.email);
+   r.setOpt(new curlpp::options::HttpHeader(headers));
 
-			std::ostringstream response;
-			r.setOpt(new curlpp::options::WriteStream(&response));
+   std::ostringstream response;
+   r.setOpt(new curlpp::options::WriteStream(&response));
 
-			r.perform();
-			std::string response_str = response.str();
-			if (response_str.size() == 0) throw std::runtime_error("No prices from server");
-				
-			return response_str;
-		}
-		catch (std::exception &e) {
-			std::cerr << "Error: " << e.what() << std::endl;
-			if (--timeout == 0) throw;
-		}
-		std::this_thread::sleep_for(std::chrono::minutes(1));
-	}
-	return std::string();
+   r.perform();
+   std::string response_str = response.str();
+   if (response_str.size() == 0) throw std::runtime_error("No prices from server");
+
+   return response_str;
 }
 
 std::pair<price_map, float> parse_el_prices_energidataservice(std::string str)
@@ -480,7 +458,7 @@ std::pair<price_map, float> parse_el_prices_energidataservice(std::string str)
 
 	Document doc;
 	doc.Parse(str.c_str());
-        if (!doc.HasMember("records")) return {prices, NAN};
+        if (!doc.HasMember("records")) throw std::runtime_error("No prices found"); 
 	const Value &elspotprices = doc["records"];
 	if (!elspotprices.IsArray()) throw std::runtime_error("No prices found");
 	std::chrono::time_point<std::chrono::system_clock> last_time;
@@ -522,7 +500,7 @@ price_map parse_el_prices_carnot(std::string str, float dk_eur)
 
 	Document doc;
 	doc.Parse(str.c_str());
-        if (!doc.HasMember("predictions")) return prices;
+        if (!doc.HasMember("predictions")) throw std::runtime_error("No prices found");
 	const Value &elspotprices = doc["predictions"];
 	if (!elspotprices.IsArray()) throw std::runtime_error("No prices found");
 	for (auto &i : elspotprices.GetArray()) {
@@ -551,18 +529,40 @@ price_map parse_el_prices_carnot(std::string str, float dk_eur)
 
 std::pair<price_map, float> get_el_prices_energidataservice()
 {
-	auto data = download_el_prices_energidataservice();
-	return parse_el_prices_energidataservice(data);
+   int timeout = 10;
+   while (true) {
+      try {
+         auto data = download_el_prices_energidataservice();
+         return parse_el_prices_energidataservice(data);
+      }
+      catch (std::exception &e) {
+         std::cerr << "Error: " << e.what() << std::endl;
+         if (--timeout == 0) throw;
+      }
+      std::this_thread::sleep_for(std::chrono::minutes(1));
+   }
+   return {{}, NAN};
 }
 
 price_map get_el_prices_carnot(float dk_eur)
 {
-	auto data_dk1 = download_el_prices_carnot("dk1");
-	auto data_dk2 = download_el_prices_carnot("dk2");
-	auto data0 = parse_el_prices_carnot(data_dk1, dk_eur);
-	auto data1 = parse_el_prices_carnot(data_dk2, dk_eur);
-        data0.insert(data1.begin(), data1.end());
-        return data0;
+   int timeout = 10;
+   while (true) {
+      try {
+         auto data_dk1 = download_el_prices_carnot("dk1");
+         auto data_dk2 = download_el_prices_carnot("dk2");
+         auto data0 = parse_el_prices_carnot(data_dk1, dk_eur);
+         auto data1 = parse_el_prices_carnot(data_dk2, dk_eur);
+         data0.insert(data1.begin(), data1.end());
+         return data0;
+      }
+      catch (std::exception &e) {
+         std::cerr << "Error: " << e.what() << std::endl;
+         if (--timeout == 0) throw;
+      }
+      std::this_thread::sleep_for(std::chrono::minutes(1));
+   }
+   return {};
 }
 
 price_map get_el_prices()
@@ -719,12 +719,11 @@ int main()
 
 			// Get prices from latest known area
 			price_list el_prices = el_prices_all[area];
+                        std::cout << "Spot prices (" << area << "):" << std::endl;
+                        for(auto &i : el_prices) std::cout << date::make_zoned(date::current_zone(), i.time) << ": " << i.price << std::endl; std::cout << std::endl;
 			auto el_price_now = std::find_if(el_prices.begin(), el_prices.end(), 
 					[&now](const price_entry &a) { return (a.time + std::chrono::hours(1)) > now; });
 			if (el_price_now == el_prices.end()) throw runtime_error("No current el price");
-
-                        std::cout << "Spot prices (" << area << "):" << std::endl;
-                        for(auto &i : el_prices) std::cout << date::make_zoned(date::current_zone(), i.time) << ": " << i.price << std::endl; std::cout << std::endl;
 
 			auto start_time = next_event;
                         int window_level_now = 0;
