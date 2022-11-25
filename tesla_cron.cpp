@@ -411,7 +411,7 @@ vehicle_data get_vehicle_data_from_cache(std::string vin)
 
 std::string download_el_prices_energidataservice()
 {
-   std::string url = "https://api.energidataservice.dk/v2/dataset/Elspotprices?limit=500";
+   std::string url = "https://api.energidataservice.dk/dataset/Elspotprices?limit=500";
 
    curlpp::Cleanup clean;
    curlpp::Easy r;
