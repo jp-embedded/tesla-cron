@@ -18,7 +18,7 @@
 #*************************************************************************/
 
 
-OBJS :=	tesla_cron.o graph.o location.o icalendarlib/date.o icalendarlib/icalendar.o icalendarlib/types.o date/src/tz.o ReverseGeocode.o
+OBJS :=	tesla_cron.o graph.o location.o icalendarlib/date.o icalendarlib/icalendar.o icalendarlib/types.o date/src/tz.o ReverseGeocode.o elnet-forsyningsgraenser-022020.o
 CPPFLAGS := -Wall -Wpedantic -MD -MP -O2 -I /usr/include/python3.8/ -I date/include/
 CXXFLAGS := -std=c++11
  
@@ -32,7 +32,10 @@ install:
 	echo "1 * * * *	root	/usr/local/bin/tesla_cron | tee /var/log/tesla_cron.log" > /etc/cron.d/tesla_cron
 
 clean:
-	rm -f $(OBJS) $(OBJS:.o=.d) tesla_cron
+	rm -f $(OBJS) $(OBJS:.o=.d) tesla_cron elnet-forsyningsgraenser-022020.cpp
+
+elnet-forsyningsgraenser-022020.cpp: elnet-forsyningsgraenser-022020.json
+	xxd -i $< > $@
 
 -include $(OBJS:.o=.d)
 

@@ -680,6 +680,8 @@ date::sys_time<std::chrono::system_clock::duration> get_next_event(std::string c
 	return found;
 }
 
+std::string get_elnet(location loc);
+
 int main()
 {
 	Py_Initialize();
@@ -715,7 +717,9 @@ int main()
                         std::string country = geoloc[0]["cc"];
                         std::string loc_name = geoloc[0]["name"];
 			auto area = get_area(country, vd_cached.drive_state.loc);
+                        auto elnet = get_elnet(vd_cached.drive_state.loc);
 			std::cout << "Location:         " << country << '/' << area << ' ' << loc_name << " (" << vd_cached.drive_state.loc.lat() << ", " << vd_cached.drive_state.loc.lon() << ")" << std::endl;
+                        std::cout << "Elnet:            " << elnet << std::endl;
 
 			// Get prices from latest known area
 			price_list el_prices = el_prices_all[area];

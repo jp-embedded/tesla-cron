@@ -21,6 +21,7 @@
 #define __LOCATION_H
 
 #include <cmath>
+#include <vector>
 
 class location
 {
@@ -35,6 +36,8 @@ class location
 	double m_lat;
 	double m_lon;
 };
+
+using polygon = std::vector<location>;
 
 double distance(const location& a, const location& b);
 
