@@ -408,6 +408,27 @@ vehicle_data get_vehicle_data_from_cache(std::string vin)
 }
 
 
+std::string download_tarif_prices_energidataservice(std::string net)
+{
+   std::string start = "2023-01-01T00:00";
+   std::string end = "2023-01-31T00:00";
+   std::string filter = "{\"ChargeOwner\":[\"" + net + "\"],\"Note\":[\"Nettarif C time\"]}";
+   std::string url = "https://api.energidataservice.dk/dataset/DatahubPricelist?&start=" + start + "&end=" + end + "&filter=" + curlpp::escape(filter) + "&sort=ValidFrom%20DESC";
+   std::cout << url << std::endl;
+
+   curlpp::Cleanup clean;
+   curlpp::Easy r;
+   r.setOpt(new curlpp::options::Url(url));
+
+   std::ostringstream response;
+   r.setOpt(new curlpp::options::WriteStream(&response));
+
+   r.perform();
+   std::string response_str = response.str();
+   if (response_str.size() == 0) throw std::runtime_error("No prices from server");
+
+   return response_str;
+}
 
 std::string download_el_prices_energidataservice()
 {
