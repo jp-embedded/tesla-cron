@@ -43,6 +43,7 @@
 #include <algorithm>
 #include <list>
 #include <iostream>
+#include <thread>
 
 #include "config.inc"
 
@@ -588,12 +589,14 @@ price_map get_el_prices_carnot(float dk_eur)
 
 price_map get_el_prices()
 {
-   auto prices = get_el_prices_energidataservice();
+   auto ret = get_el_prices_energidataservice();
+   auto prices = ret.first;
+   auto dk_eur = ret.second;
    
    if(!account.carnot_apikey.empty()) {
-      auto prices_carnot = get_el_prices_carnot(prices.second);
+      auto prices_carnot = get_el_prices_carnot(dk_eur);
       if (prices_carnot.empty()) std::cout << "Error: Empty reply from Carnot." << std::endl;
-      for (auto& p : prices.first) {
+      for (auto& p : prices) {
          auto c = prices_carnot.find(p.first);
          if (c != prices_carnot.end()) {
             // Merge Carnot prices
@@ -610,7 +613,7 @@ price_map get_el_prices()
       }
    }
 
-   return prices.first;
+   return prices;
 }
 
 std::chrono::time_point<std::chrono::system_clock> find_cheapest_start(const price_list &prices, int hours, const std::chrono::time_point<std::chrono::system_clock> &start, const std::chrono::time_point<std::chrono::system_clock> &stop)

@@ -19,13 +19,15 @@
 
 
 OBJS :=	tesla_cron.o graph.o location.o icalendarlib/date.o icalendarlib/icalendar.o icalendarlib/types.o date/src/tz.o ReverseGeocode.o elnet-forsyningsgraenser-022020.o
-CPPFLAGS := -Wall -Wpedantic -MD -MP -O2 -I /usr/include/python3.8/ -I date/include/
+CPPFLAGS := -Wall -Wpedantic -MD -MP -O2 
+CPPFLAGS += $(shell python3-config --includes)
+CPPFLAGS += -I date/include/
 CXXFLAGS := -std=c++11
  
 all: tesla_cron
 
 tesla_cron: $(OBJS)
-	$(CXX) -o $@ $^ -lcurl -lcurlpp -lboost_python38 -lpython3.8 -lrrd
+	$(CXX) -o $@ $^ -lcurl -lcurlpp -lboost_python3$(shell python3-config --includes | cut -d' ' -f1 | cut -d'.' -f 2) -lrrd $(shell python3-config --ldflags --embed)
 
 install:
 	install tesla_cron /usr/local/bin/
