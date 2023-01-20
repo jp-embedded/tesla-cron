@@ -409,13 +409,14 @@ vehicle_data get_vehicle_data_from_cache(std::string vin)
 }
 
 
-std::string download_tarif_prices_energidataservice(std::string net)
+std::string download_tarif_prices_energidataservice(std::string net, std::chrono::time_point<std::chrono::system_clock> from, std::chrono::time_point<std::chrono::system_clock> to)
 {
-   std::string start = "2023-01-01T00:00";
-   std::string end = "2023-01-31T00:00";
+   // Ensure begin_time is first day of month because some tarif entries has a begin date of first day of month.
+   // Round up end time to end of day / start of next day
+   std::stringstream from_ss; from_ss << date::format("%Y-%m-01T00:00", from);
+   std::stringstream to_ss; to_ss << date::format("%Y-%m-%dT00:00", to + std::chrono::hours(24));
    std::string filter = "{\"ChargeOwner\":[\"" + net + "\"],\"Note\":[\"Nettarif C time\"]}";
-   std::string url = "https://api.energidataservice.dk/dataset/DatahubPricelist?&start=" + start + "&end=" + end + "&filter=" + curlpp::escape(filter) + "&sort=ValidFrom%20DESC";
-   std::cout << url << std::endl;
+   std::string url = "https://api.energidataservice.dk/dataset/DatahubPricelist?&start=" + from_ss.str() + "&end=" + to_ss.str() + "&filter=" + curlpp::escape(filter) + "&sort=ValidFrom%20DESC&timezone=utc";
 
    curlpp::Cleanup clean;
    curlpp::Easy r;
@@ -524,6 +525,20 @@ std::pair<price_list, float> parse_el_prices_energidataservice(std::string str, 
 	return {prices, dk_eur};
 }
 
+price_list parse_tarif_prices_energidataservice(std::string str, std::string elnet, float dk_eur)
+{
+   using namespace rapidjson;
+   price_list prices;
+
+   // todo: implement
+   //std::cout << "! in: " << str << std::endl;
+
+   Document doc;
+   doc.Parse(str.c_str());
+
+   return prices;
+}
+
 price_list parse_el_prices_carnot(std::string str, std::string area, float dk_eur)
 {
 	using namespace rapidjson;
@@ -598,10 +613,21 @@ price_list get_el_prices_carnot(std::string area, float dk_eur)
    return {};
 }
 
-price_list get_tarif_prices_energidataservice()
+price_list get_tarif_prices_energidataservice(std::string elnet, std::chrono::time_point<std::chrono::system_clock> from, std::chrono::time_point<std::chrono::system_clock> to, float dk_eur)
 {
-   price_list prices;
-   return prices;
+   int timeout = 10;
+   while (true) {
+      try {
+         auto data = download_tarif_prices_energidataservice(elnet, from, to);
+         return parse_tarif_prices_energidataservice(data, elnet, dk_eur);
+      }
+      catch (std::exception &e) {
+         std::cerr << "Error: " << e.what() << std::endl;
+         if (--timeout == 0) throw;
+      }
+      std::this_thread::sleep_for(std::chrono::minutes(1));
+   }
+   return {};
 }
 
 price_list get_el_prices(std::string area, std::string elnet)
@@ -630,7 +656,7 @@ price_list get_el_prices(std::string area, std::string elnet)
       }
    }
 
-   auto tarif = get_tarif_prices_energidataservice();
+   auto tarif = get_tarif_prices_energidataservice(elnet, prices.begin()->time, prices.rbegin()->time, dk_eur);
 
    return prices;
 }
@@ -682,9 +708,9 @@ std::string download_calendar(std::string url)
 date::sys_time<std::chrono::system_clock::duration> get_next_event(std::string cal_url) 
 {
 	auto from = std::chrono::system_clock::now(); // todo pass as parameter
-	stringstream from_ss; from_ss << date::format("%Y%m%dT%H%M%S", from);
+        std::stringstream from_ss; from_ss << date::format("%Y%m%dT%H%M%S", from);
 	auto to = from + std::chrono::hours(48); // look two days ahead
-	stringstream to_ss; to_ss << date::format("%Y%m%dT%H%M%S", to);
+        std::stringstream to_ss; to_ss << date::format("%Y%m%dT%H%M%S", to);
 
 	auto cal = download_calendar(cal_url);
 	{
