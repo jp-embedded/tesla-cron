@@ -535,6 +535,47 @@ price_list parse_tarif_prices_energidataservice(std::string str, std::string eln
 
    Document doc;
    doc.Parse(str.c_str());
+   if (!doc.HasMember("records")) throw std::runtime_error("No tarif prices found (no records)");
+   const Value& records = doc["records"];
+   if (!records.IsArray()) throw std::runtime_error("No tarif prices found (no array)");
+   for (auto& i : records.GetArray()) {
+      const Value& v_elnet = i["ChargeOwner"];
+      if (!v_elnet.IsString()) throw std::runtime_error("Unexpected ChargeOwner format");
+      const Value& v_from = i["ValidFrom"];
+      if (!v_from.IsString()) throw std::runtime_error("Unexpected ValidFrom format");
+      const Value& v_to = i["ValidTo"];
+      if (!v_to.IsString()) throw std::runtime_error("Unexpected ValidTo format");
+      std::vector<float> hour_prices;
+      for (int h = 0; h < 24; ++h) {
+         auto key = std::string("Price") + to_string(h+1);
+         const Value& v_hour_price = i[key.c_str()];
+         if (!v_hour_price.IsNumber()) throw std::runtime_error("Unexpected Price format");
+         hour_prices.push_back(v_hour_price.GetDouble());
+      }
+
+      // Get from and to date. Time = 00:00
+      std::chrono::time_point<std::chrono::system_clock> time_from_local, time_to_local;
+      std::stringstream ss_from(v_from.GetString());
+      ss_from >> date::parse("%Y-%m-%dT", time_from_local);
+      std::stringstream ss_to(v_to.GetString());
+      ss_to >> date::parse("%Y-%m-%dT", time_to_local);
+
+      // Convert to UTC. Price1, Price2, ... does not seem to be adjusted even timezone is set to utc in download
+      auto time_from = date::make_zoned("CET", time_from_local).get_sys_time();
+      auto time_to = date::make_zoned("CET", time_to_local).get_sys_time();
+
+      for (auto d = time_from; d < time_to; d += std::chrono::hours(24)) {
+         price_entry entry;
+         entry.time = d;
+         for (auto p : hour_prices) {
+            entry.price = p;
+            prices.push_back(entry);
+            //std::cout << "tarif: " << date::make_zoned(date::current_zone(), entry.time) << ": " << entry.price << std::endl;
+            entry.time += std::chrono::hours(1);
+         }
+      }
+   }
+
 
    return prices;
 }
