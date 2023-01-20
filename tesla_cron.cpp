@@ -434,7 +434,7 @@ std::string download_tarif_prices_energidataservice(std::string net)
 std::string download_el_prices_energidataservice(std::string area)
 {
    std::string filter = "{\"PriceArea\":[\"" + area + "\"]}";
-   std::string url = "https://api.energidataservice.dk/dataset/Elspotprices?limit=500&filter=" + curlpp::escape(filter);
+   std::string url = "https://api.energidataservice.dk/dataset/Elspotprices?limit=100&filter=" + curlpp::escape(filter);
 
    curlpp::Cleanup clean;
    curlpp::Easy r;
