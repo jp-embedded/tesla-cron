@@ -34,7 +34,6 @@ struct price_entry
 };
 
 typedef std::vector<price_entry> price_list;
-typedef std::map<std::string, price_list> price_map;
 
 #endif
 
