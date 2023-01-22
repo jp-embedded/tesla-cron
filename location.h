@@ -22,6 +22,7 @@
 
 #include <cmath>
 #include <vector>
+#include <string>
 
 class location
 {
@@ -40,6 +41,7 @@ class location
 using polygon = std::vector<location>;
 
 double distance(const location& a, const location& b);
+std::string get_elnet(location loc);
 
 #endif
 

@@ -790,8 +790,6 @@ date::sys_time<std::chrono::system_clock::duration> get_next_event(std::string c
 	return found;
 }
 
-std::string get_elnet(location loc);
-
 int main()
 {
 	Py_Initialize();
