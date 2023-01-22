@@ -530,8 +530,7 @@ price_list parse_tarif_prices_energidataservice(std::string str, std::string eln
    using namespace rapidjson;
    price_list prices;
 
-   // todo: implement
-   //std::cout << "! in: " << str << std::endl;
+   //std::cout << "in: " << str << std::endl;
 
    Document doc;
    doc.Parse(str.c_str());
@@ -545,6 +544,8 @@ price_list parse_tarif_prices_energidataservice(std::string str, std::string eln
       if (!v_from.IsString()) throw std::runtime_error("Unexpected ValidFrom format");
       const Value& v_to = i["ValidTo"];
       if (!v_to.IsString()) throw std::runtime_error("Unexpected ValidTo format");
+      const Value& v_gln = i["GLN_Number"];
+      if (v_gln.IsNull()) continue; // Dublicate entries seen with Trefor, with gln=null on one of them. Skip those.
       std::vector<float> hour_prices;
       for (int h = 0; h < 24; ++h) {
          auto key = std::string("Price") + to_string(h+1);
@@ -554,21 +555,22 @@ price_list parse_tarif_prices_energidataservice(std::string str, std::string eln
       }
 
       // Get from and to date. Time = 00:00
-      std::chrono::time_point<std::chrono::system_clock> time_from_local, time_to_local;
+      date::local_time<std::chrono::system_clock::duration> time_from_local, time_to_local;
       std::stringstream ss_from(v_from.GetString());
       ss_from >> date::parse("%Y-%m-%dT", time_from_local);
       std::stringstream ss_to(v_to.GetString());
       ss_to >> date::parse("%Y-%m-%dT", time_to_local);
 
-      // Convert to UTC. Price1, Price2, ... does not seem to be adjusted even timezone is set to utc in download
+      // The 00:00 start time is CET. Convert to UTC. 
       auto time_from = date::make_zoned("CET", time_from_local).get_sys_time();
       auto time_to = date::make_zoned("CET", time_to_local).get_sys_time();
 
+      //std::cout << "entry: " << v_from.GetString() << " -> "  << v_to.GetString() << std::endl;
       for (auto d = time_from; d < time_to; d += std::chrono::hours(24)) {
          price_entry entry;
          entry.time = d;
          for (auto p : hour_prices) {
-            entry.price = p;
+            entry.price = p * 1000.0 / dk_eur; // convert dkk/kwh to eur/mwh
             prices.push_back(entry);
             //std::cout << "tarif: " << date::make_zoned(date::current_zone(), entry.time) << ": " << entry.price << std::endl;
             entry.time += std::chrono::hours(1);
@@ -576,6 +578,7 @@ price_list parse_tarif_prices_energidataservice(std::string str, std::string eln
       }
    }
 
+   std::sort(prices.begin(), prices.end());
 
    return prices;
 }
@@ -697,7 +700,19 @@ price_list get_el_prices(std::string area, std::string elnet)
       }
    }
 
-   auto tarif = get_tarif_prices_energidataservice(elnet, prices.begin()->time, prices.rbegin()->time, dk_eur);
+   if (!elnet.empty()) {
+      auto tarif = get_tarif_prices_energidataservice(elnet, prices.begin()->time, prices.rbegin()->time, dk_eur);
+      // add tarif prices
+      for (auto& p : prices) {
+         auto i_t = std::find(tarif.begin(), tarif.end(), p);
+         if (i_t == tarif.end()) {
+            std::cout << "Error: No tarif price found for " << date::make_zoned(date::current_zone(), p.time) << std::endl;
+            continue;
+         }
+         p.price += i_t->price;
+         tarif.erase(i_t);
+      }
+   }
 
    return prices;
 }

@@ -31,6 +31,7 @@ struct price_entry
 	float price { NAN };
 	bool operator <(const price_entry &other) { return time < other.time; }
 	bool operator >(const price_entry &other) { return time > other.time; }
+	bool operator ==(const price_entry &other) { return time == other.time; }
 };
 
 typedef std::vector<price_entry> price_list;
