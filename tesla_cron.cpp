@@ -868,10 +868,11 @@ int main()
 			}
 #endif
 
+                        // Let car sleep until 1 hour before potential start. At this point we may need to start charging.
+                        // Also ensure last cached data is from parked state so we have a valid location.
+                        // Also, when parked after moving, scheduled departure needs to be updated. It is stored by location.
 			if (start_time - std::chrono::hours(1) > now) {
-                                // Stop waiting 1 hour before potential start, so it can be postponed if needed below before charge start.
-				// if car is awake we can update the scheduled charge.
-				if (!available(car.vin)) {
+				if (!vd_cached.drive_state.moving && !available(car.vin)) {
 					std::cout << "Wait..." << std::endl;
                                         graph(car.vin, *el_price_now, window_level_now, next_event);
 					continue;
