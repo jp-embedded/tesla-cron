@@ -322,7 +322,7 @@ void scheduled_charging(std::string vin, date::sys_time<std::chrono::system_cloc
 	}
 }
 
-void scheduled_departure(std::string vin, date::sys_time<std::chrono::system_clock::duration> end_off_peak_time, date::sys_time<std::chrono::system_clock::duration> next_event)
+void scheduled_departure(std::string vin, date::sys_time<std::chrono::system_clock::duration> end_off_peak_time, date::sys_time<std::chrono::system_clock::duration> next_event, bool preheat)
 {
 	using namespace boost::python;
 
@@ -355,7 +355,7 @@ void scheduled_departure(std::string vin, date::sys_time<std::chrono::system_clo
                         dict kwargs_sd;
                         kwargs_sd["enable"] = true;
                         kwargs_sd["off_peak_charging_enabled"] = true;
-                        kwargs_sd["preconditioning_enabled"] = true;
+                        kwargs_sd["preconditioning_enabled"] = preheat;
                         kwargs_sd["preconditioning_weekdays_only"] = false;
                         kwargs_sd["off_peak_charging_weekdays_only"] = false;
                         kwargs_sd["departure_time"] = departure_m.count();
@@ -746,9 +746,8 @@ std::string download_calendar(std::string url)
 	return std::string();
 }
 
-date::sys_time<std::chrono::system_clock::duration> get_next_event(std::string cal_url) 
+date::sys_time<std::chrono::system_clock::duration> get_next_event(std::string cal_url, date::sys_time<std::chrono::system_clock::duration> from) 
 {
-	auto from = std::chrono::system_clock::now(); // todo pass as parameter
         std::stringstream from_ss; from_ss << date::format("%Y%m%dT%H%M%S", from);
 	auto to = from + std::chrono::hours(48); // look two days ahead
         std::stringstream to_ss; to_ss << date::format("%Y%m%dT%H%M%S", to);
@@ -804,7 +803,7 @@ int main()
 			std::cout << "--- " << car.vin << " ---" << std::endl;
 			auto next_event = now + std::chrono::hours(24) - std::chrono::minutes(15); // latest time to schedule charging
 			for (auto &cal : car.calendars) {
-				auto event = get_next_event(cal);
+				auto event = get_next_event(cal, now);
 				next_event = std::min(next_event, event);
 
 			}
@@ -855,6 +854,7 @@ int main()
 			}
 #endif
 
+                        // todo: also wake up after event (or when scheduled departure differs from cache?) to ensure scheduled departure is updated before leaving.
 			if (start_time - std::chrono::hours(1) > now) {
                                 // Stop waiting 1 hour before potential start, so it can be postponed if needed below before charge start.
 				// if car is awake we can update the scheduled charge.
@@ -904,10 +904,24 @@ int main()
                            scheduled_charging(car.vin, t, next_event);
                         }
                         else {
-                           std::cout << "Scheduled depart: " << date::make_zoned(date::current_zone(), next_event) << std::endl;
+
+                           // if depart > 20h from now use 06:00 as default.
+                           // 20h gives 4h to switch from calendar event to default above after charging is complete.
+                           // Which will then be default when arriving back
+                           bool preheat = true;
+                           auto depart = next_event;
+                           if (depart > now + std::chrono::hours(20)) {
+                              preheat = false;
+
+                              // todo: zone should be tesla's time zone
+                              auto depart_local = date::floor<date::days>(date::make_zoned(date::current_zone(), depart).get_local_time()) + std::chrono::hours(6);
+                              depart = date::make_zoned(date::current_zone(), depart_local).get_sys_time();
+                           }
+
+                           std::cout << "Scheduled depart: " << date::make_zoned(date::current_zone(), depart) << std::endl;
                            // off peak must be set at scheduled departure. Otherwise the car starts when plugged in. Possibly a bug in current tesla sw
-                           //scheduled_departure(car.vin, start_time + std::chrono::hours(charge_hours), next_event);
-                           scheduled_departure(car.vin, next_event, next_event);
+                           //scheduled_departure(car.vin, start_time + std::chrono::hours(charge_hours), depart, preheat);
+                           scheduled_departure(car.vin, depart, depart, preheat);
                         }
 
                         // Start charge now if start time passed.
