@@ -499,7 +499,7 @@ std::pair<price_list, float> parse_el_prices_energidataservice(std::string str, 
 
                 // Validate area
                 if (v_area.GetString() != area) {
-                   std::cout << "Warning: Unexpected area" << std::endl;
+                   std::cout << "Warning: Unexpected area (" << v_area.GetString() << ", " << area << ')' << std::endl;
                    continue;
                 }
 
@@ -606,7 +606,7 @@ price_list parse_el_prices_carnot(std::string str, std::string area, float dk_eu
 
                 // Validate area
                 if (s_area != area) {
-                   std::cout << "Warning: Unexpected area" << std::endl;
+                   std::cout << "Warning: Unexpected area (" << s_area << ", " << area << ')' << std::endl;
                    continue;
                 }
 
