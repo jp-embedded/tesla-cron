@@ -889,16 +889,11 @@ int main()
                         std::cout << "Moving:           " << vd.drive_state.moving << std::endl;
                         //std::cout << "Scheduled start: " << date::make_zoned(date::current_zone(), vd.charge_state.scheduled_charging_start_time) << std::endl;
 
-			if (vd.charge_state.charging_state == "Charging") {
-				// Don't schedule while charigng. That would stop charging
+			if ((vd.charge_state.charging_state == "Charging") // Don't schedule while charigng. That would stop charging
+                        || (vd.drive_state.moving)) {                      // Don't schedule if car is moving. Tesla will remember by location
                                 graph(car.vin, *el_price_now, window_level_now, next_event, vd);
 				continue;
-			}
-			else if (vd.drive_state.moving) {
-				// Don't schedule if car is moving. Tesla will remember by location
-                                graph(car.vin, *el_price_now, window_level_now, next_event, vd);
-				continue;
-			}
+                        }
 
 			// +1 is for rounding up. Result should be from 1 to max_charge_hours since those are included in previous guess.
                         // max_charge_hours+1 is possible but unlikely (requires 0% level & 100% limit). Also charging at least 1h 
@@ -937,13 +932,9 @@ int main()
                            scheduled_departure(car.vin, depart, depart, preheat);
                         }
 
-                        // Start charge now if start time passed.
-			if (start_time > now) {
-                                graph(car.vin, *el_price_now, window_level_now, next_event, vd);
-				continue;
-			}
-			// dont start charge if level is less than 1% from charge limit
-			if ((vd.charge_state.charge_limit_soc - vd.charge_state.battery_level) <= 1) {
+			if ((start_time > now)                                                        // Don't start charge yet unless start time passed.
+			|| ((vd.charge_state.charge_limit_soc - vd.charge_state.battery_level) <= 1)  // dont start charge if level is less than 1% from charge limit
+			|| (vd.charge_state.charging_state == "Disconnected")) {                      // Can't start charge if disconnected
                                 graph(car.vin, *el_price_now, window_level_now, next_event, vd);
 				continue;
 			}
