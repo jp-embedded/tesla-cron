@@ -77,7 +77,7 @@ std::vector<std::map<std::string, std::string>> ReverseGeocode::search(double _l
       Py_DECREF(pDict);
       
     }
-    Py_DECREF(pList);
+    //Py_DECREF(pList); // why? segfaults on second call, uncommenting pDict unref above also werks
   }
   else
   {

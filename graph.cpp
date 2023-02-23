@@ -54,36 +54,42 @@ void graph(const std::string &vin, const price_entry &price, int window_level, d
         char charging = vd_ok ? vd.charge_state.charging_state == "Charging" ? '1' : '0' : 'U';
 
 	auto hour_end = price.time + std::chrono::minutes(60); // current price last until next hour
-        auto hour_end_sec = std::chrono::duration_cast<std::chrono::seconds>(hour_end.time_since_epoch()).count();
 
-        std::stringstream values;
-        values << hour_end_sec << ":" << price.price;
-        if (vd_ok) values << ":" << vd.charge_state.battery_level; else values << ":" << 'U';
-        values << ":" << window_level;
-        values << ":" << charging;
-        values << ":" << 0;
-        std::string values_str = values.str();
-        const char *updateparams[] = { "rrdupdate", rrd_name.c_str(), values_str.c_str() };
-        const int param_count = sizeof(updateparams) / sizeof(updateparams[0]);
-        rrd_update(param_count, (char**)updateparams);
-        rrd_clear_error();
-
-	// graph next event if before next graph
-	auto next_hour_end = hour_end + std::chrono::minutes(60); 
-	auto next_event_end = next_event + std::chrono::minutes(1);
-	if (next_event_end < next_hour_end) {
-		// first add an entry with no event to fill "no event" until event
-		for (int n = 0; n < 2; ++n) {
-			auto next_event_sec = std::chrono::duration_cast<std::chrono::seconds>(next_event_end.time_since_epoch()).count();
-			next_event_sec += (n-1) * 60;
-			std::stringstream v;
-			v << next_event_sec << ":U:U:U:U:" << n;
-				std::string v_str = v.str();
-			const char *p[] = { "rrdupdate", rrd_name.c_str(), v_str.c_str() };
-			const int p_count = sizeof(p) / sizeof(p[0]);
-			rrd_update(p_count, (char**)p);
-			rrd_clear_error();
-		}
+	// if next event is within 30 min in next hour, extend this hour to that. Otherwise it could be 
+	// ignored by next invoke if eg next event is 7:05 and now is 7:10
+	if ((next_event > hour_end) && (next_event < hour_end + std::chrono::minutes(30))) {
+		hour_end = next_event;
 	}
+
+	// do 1 - 3 graphs. 0=event start (if in this hour), 1=event end (if in this hour), 2=hour end
+	std::vector<date::sys_time<std::chrono::system_clock::duration>> graph_times;
+	if (next_event <= hour_end) {
+		graph_times.push_back(next_event - std::chrono::minutes(1)); // event start.
+		graph_times.push_back(next_event);                           // event end
+	}
+	else {
+		// in 'else' so window will stop at event instead of hour end
+		graph_times.push_back(hour_end);
+	}
+
+	bool event_on = false;
+	for (auto t : graph_times) {
+		auto time_sec = std::chrono::duration_cast<std::chrono::seconds>(t.time_since_epoch()).count();
+		std::stringstream values;
+		values << time_sec << ":" << price.price;
+		if (vd_ok) values << ":" << vd.charge_state.battery_level; else values << ":" << 'U';
+		values << ":" << window_level;
+		values << ":" << charging;
+		values << ":" << (event_on ? 1 : 0); // event 0 on first, 1 on second 
+		std::string values_str = values.str();
+		const char *updateparams[] = { "rrdupdate", rrd_name.c_str(), values_str.c_str() };
+		const int param_count = sizeof(updateparams) / sizeof(updateparams[0]);
+		int res = rrd_update(param_count, (char**)updateparams);
+		if(res !=0) std::cerr << "graph err: " << rrd_get_error() << std::endl;
+		rrd_clear_error(); 
+
+		event_on = !event_on;
+	}
+
 }
 
