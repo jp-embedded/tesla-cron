@@ -543,7 +543,6 @@ price_list parse_tarif_prices_energidataservice(std::string str, std::string eln
       const Value& v_from = i["ValidFrom"];
       if (!v_from.IsString()) throw std::runtime_error("Unexpected ValidFrom format");
       const Value& v_to = i["ValidTo"];
-      if (!v_to.IsString()) throw std::runtime_error("Unexpected ValidTo format");
       const Value& v_gln = i["GLN_Number"];
       if (v_gln.IsNull()) continue; // Dublicate entries seen with Trefor, with gln=null on one of them. Skip those.
       std::vector<float> hour_prices;
@@ -558,14 +557,19 @@ price_list parse_tarif_prices_energidataservice(std::string str, std::string eln
       date::local_time<std::chrono::system_clock::duration> time_from_local, time_to_local;
       std::stringstream ss_from(v_from.GetString());
       ss_from >> date::parse("%Y-%m-%dT", time_from_local);
-      std::stringstream ss_to(v_to.GetString());
-      ss_to >> date::parse("%Y-%m-%dT", time_to_local);
 
       // The 00:00 start time is CET. Convert to UTC. 
       auto time_from = date::make_zoned("CET", time_from_local).get_sys_time();
-      auto time_to = date::make_zoned("CET", time_to_local).get_sys_time();
+      auto time_to = std::chrono::system_clock::now() + date::days(90); // Use 90 days from now if ValidTo is missing
 
-      //std::cout << "entry: " << v_from.GetString() << " -> "  << v_to.GetString() << std::endl;
+      if (v_to.IsString()) { // ValidTo may be missing
+	      std::stringstream ss_to(v_to.GetString());
+	      ss_to >> date::parse("%Y-%m-%dT", time_to_local);
+	      time_to = date::make_zoned("CET", time_to_local).get_sys_time();
+      }
+
+      // std::cout << "entry: " << v_from.GetString() << " -> "  << (v_to.IsString() ? v_to.GetString() : "...") << std::endl;
+      // todo: limit time span. Could be large
       for (auto d = time_from; d < time_to; d += std::chrono::hours(24)) {
          price_entry entry;
          entry.time = d;
