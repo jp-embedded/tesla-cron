@@ -558,14 +558,14 @@ price_list parse_tarif_prices_energidataservice(std::string str, std::string eln
       std::stringstream ss_from(v_from.GetString());
       ss_from >> date::parse("%Y-%m-%dT", time_from_local);
 
-      // The 00:00 start time is CET. Convert to UTC. 
-      auto time_from = date::make_zoned("CET", time_from_local).get_sys_time();
+      // The 00:00 start time is DK time zone (with DST). Convert to UTC. 
+      auto time_from = date::make_zoned("Europe/Copenhagen", time_from_local).get_sys_time();
       auto time_to = std::chrono::system_clock::now() + date::days(90); // Use 90 days from now if ValidTo is missing
 
       if (v_to.IsString()) { // ValidTo may be missing
 	      std::stringstream ss_to(v_to.GetString());
 	      ss_to >> date::parse("%Y-%m-%dT", time_to_local);
-	      time_to = date::make_zoned("CET", time_to_local).get_sys_time();
+	      time_to = date::make_zoned("Europe/Copenhagen", time_to_local).get_sys_time();
       }
 
       // std::cout << "entry: " << v_from.GetString() << " -> "  << (v_to.IsString() ? v_to.GetString() : "...") << std::endl;
