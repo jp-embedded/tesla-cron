@@ -554,29 +554,30 @@ price_list parse_tarif_prices_energidataservice(std::string str, std::string eln
       }
 
       // Get from and to date. Time = 00:00
+      // The 00:00 start time is CET time zone (with DST).
+      const char tarif_zone[] = "CET";
       date::local_time<std::chrono::system_clock::duration> time_from_local, time_to_local;
       std::stringstream ss_from(v_from.GetString());
       ss_from >> date::parse("%Y-%m-%dT", time_from_local);
 
-      // The 00:00 start time is DK time zone (with DST). Convert to UTC. 
-      auto time_from = date::make_zoned("Europe/Copenhagen", time_from_local).get_sys_time();
-      auto time_to = std::chrono::system_clock::now() + date::days(90); // Use 90 days from now if ValidTo is missing
-
       if (v_to.IsString()) { // ValidTo may be missing
 	      std::stringstream ss_to(v_to.GetString());
 	      ss_to >> date::parse("%Y-%m-%dT", time_to_local);
-	      time_to = date::make_zoned("Europe/Copenhagen", time_to_local).get_sys_time();
+      }
+      else {
+         // Use 90 days from now if ValidTo is missing
+         time_to_local = date::locate_zone(tarif_zone)->to_local(std::chrono::system_clock::now()) + date::days(90); 
       }
 
       // std::cout << "entry: " << v_from.GetString() << " -> "  << (v_to.IsString() ? v_to.GetString() : "...") << std::endl;
       // todo: limit time span. Could be large
-      for (auto d = time_from; d < time_to; d += std::chrono::hours(24)) {
+      for (auto d = time_from_local; d < time_to_local; d += std::chrono::hours(24)) {
          price_entry entry;
-         entry.time = d;
+         entry.time = date::make_zoned(tarif_zone, d).get_sys_time();
          for (auto p : hour_prices) {
             entry.price = p * 1000.0 / dk_eur; // convert dkk/kwh to eur/mwh
             prices.push_back(entry);
-            //std::cout << "tarif: " << date::make_zoned(date::current_zone(), entry.time) << ": " << entry.price << std::endl;
+            // std::cout << "tarif: " << date::make_zoned(date::current_zone(), entry.time) << ": " << entry.price << std::endl;
             entry.time += std::chrono::hours(1);
          }
       }
