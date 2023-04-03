@@ -719,6 +719,13 @@ price_list get_el_prices(std::string area, std::string elnet)
       }
    }
 
+   // Convert prices to DKK
+   float el_afgift = 0.01;          // 2023 prices (https://elspotpris.dk/live)
+   float system_tarif = 0.06750;    // 2023 prices (https://elspotpris.dk/live)
+   float trans_tarif = 0.07250;     // 2023 prices (https://elspotpris.dk/live)
+   float moms = 0.25;
+   for (auto& p : prices) p.price = (p.price * dk_eur / 1000.0) * (1.0 + moms) + el_afgift + system_tarif + trans_tarif;
+
    return prices;
 }
 
