@@ -67,10 +67,7 @@ void graph(const std::string &vin, const price_entry &price, int window_level, d
 		graph_times.push_back(next_event - std::chrono::minutes(1)); // event start.
 		graph_times.push_back(next_event);                           // event end
 	}
-	else {
-		// in 'else' so window will stop at event instead of hour end
-		graph_times.push_back(hour_end);
-	}
+        graph_times.push_back(hour_end);
 
 	bool event_on = false;
 	for (auto t : graph_times) {
@@ -89,6 +86,7 @@ void graph(const std::string &vin, const price_entry &price, int window_level, d
 		rrd_clear_error(); 
 
 		event_on = !event_on;
+                window_level = 0; // stop window at event instead of hour end
 	}
 
 }
