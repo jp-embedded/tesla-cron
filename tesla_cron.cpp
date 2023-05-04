@@ -664,6 +664,7 @@ price_list get_el_prices_carnot(std::string area, float dk_eur)
 
 price_list get_tarif_prices_energidataservice(std::string elnet, std::chrono::time_point<std::chrono::system_clock> from, std::chrono::time_point<std::chrono::system_clock> to, float dk_eur)
 {
+   from -= date::days(370); // Valid from-to ranges seen at 6 months (Radius Elnet) Subtract a year to ensure from is before range start
    int timeout = 10;
    while (true) {
       try {
