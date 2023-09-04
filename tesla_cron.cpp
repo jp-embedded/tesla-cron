@@ -721,7 +721,7 @@ price_list get_el_prices(std::string area, std::string elnet)
    }
 
    // Convert prices to DKK
-   float el_afgift = 0.01;          // 2023 prices (https://elspotpris.dk/live)
+   float el_afgift = 0.87125;       // 2023 prices (https://elspotpris.dk/live)
    float system_tarif = 0.06750;    // 2023 prices (https://elspotpris.dk/live)
    float trans_tarif = 0.07250;     // 2023 prices (https://elspotpris.dk/live)
    float moms = 0.25;
