@@ -946,7 +946,7 @@ int main()
                         std::cout << "Moving:           " << vd.drive_state.moving << std::endl;
                         //std::cout << "Scheduled start: " << date::make_zoned(date::current_zone(), vd.charge_state.scheduled_charging_start_time) << std::endl;
 
-                        // Reset charge limit
+                        // Reset charge limit. Set when unlikely set by user to prevent overwriting that
 			if (vd.charge_state.charging_state == "Disconnected") {
                                 charge_limit(car.vin, charge_limit_min);
                         }
