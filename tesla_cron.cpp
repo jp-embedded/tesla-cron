@@ -121,6 +121,7 @@ vehicle_data parse_vehicle_data(std::string data)
 	if (!scheduled_charging_mode.IsString()) throw std::runtime_error("Unexpected scheduled_charging_mode format");
 	vd.charge_state.scheduled_charging_mode = scheduled_charging_mode.GetString();
 
+	if (!doc.HasMember("drive_state")) throw std::runtime_error("No drive_state"); // Missing if endpoint not provided i n URL
 	const Value &drive_state = doc["drive_state"];
 
 	if (!drive_state.HasMember("latitude")) throw std::runtime_error("No latitude"); // Missing if endpoint not provided i n URL
