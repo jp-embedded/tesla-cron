@@ -91,6 +91,7 @@ vehicle_data parse_vehicle_data(std::string data)
 	vehicle_data vd;
 	Document doc;
 	doc.Parse(data.c_str());
+	// std::cout << "parse_vehicle_data: " << data.c_str() << std::endl;
 
 	const Value &vin = doc["vin"]; 
 	if (!vin.IsString()) throw std::runtime_error("Unexpected vin format");
@@ -122,9 +123,11 @@ vehicle_data parse_vehicle_data(std::string data)
 
 	const Value &drive_state = doc["drive_state"];
 
+	if (!drive_state.HasMember("latitude")) throw std::runtime_error("No latitude"); // Missing if endpoint not provided i n URL
 	const Value &latitude = drive_state["latitude"]; 
 	if (!latitude.IsNumber()) throw std::runtime_error("Unexpected latitude format");
 
+	if (!drive_state.HasMember("longitude")) throw std::runtime_error("No longitude"); // Missing if endpoint not provided i n URL
 	const Value &longitude = drive_state["longitude"]; 
 	if (!longitude.IsNumber()) throw std::runtime_error("Unexpected longitude format");
 	vd.drive_state.loc = {latitude.GetDouble(), longitude.GetDouble()};
@@ -487,8 +490,15 @@ vehicle_data get_vehicle_data(std::string vin)
 vehicle_data get_vehicle_data_from_cache(std::string vin)
 {
 	auto data = load_vehicle_data(vin);
-	if (data.empty()) data = download_vehicle_data(vin); // need to get from car if cache is empty
-	return parse_vehicle_data(data);
+	vehicle_data ret;
+	try {
+		ret = parse_vehicle_data(data);
+	}
+	catch (std::exception &e) {
+		std::cerr << "Cache: " << e.what() << std::endl;
+		ret = get_vehicle_data(vin); // need to get from car if cache is invalid
+	}
+	return ret;
 }
 
 
