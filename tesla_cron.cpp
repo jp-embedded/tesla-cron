@@ -378,6 +378,18 @@ void scheduled_charging(std::string vin, date::sys_time<std::chrono::system_cloc
 			auto time_local = date::make_zoned(date::current_zone(), time).get_local_time();
                         auto m = std::chrono::duration_cast<std::chrono::minutes>(time_local - date::floor<date::days>(time_local));
 
+			auto next_event_local = date::make_zoned(date::current_zone(), next_event).get_local_time();
+                        auto departure_m = std::chrono::duration_cast<std::chrono::minutes>(next_event_local - date::floor<date::days>(next_event_local));
+                        dict kwargs_sd;
+                        kwargs_sd["enable"] = false;
+                        kwargs_sd["off_peak_charging_enabled"] = false;
+                        kwargs_sd["preconditioning_enabled"] = false;
+                        kwargs_sd["preconditioning_weekdays_only"] = false;
+                        kwargs_sd["off_peak_charging_weekdays_only"] = false;
+                        kwargs_sd["departure_time"] = departure_m.count();
+                        kwargs_sd["end_off_peak_time"] = departure_m.count();
+                        object ign = vehicles[index].attr("command")(*make_tuple("SCHEDULED_DEPARTURE"), **kwargs_sd); 
+
                         dict kwargs_sc;
                         kwargs_sc["enable"] = true;
                         kwargs_sc["time"] = m.count();
@@ -420,6 +432,11 @@ void scheduled_departure(std::string vin, date::sys_time<std::chrono::system_clo
                         auto end_off_peak_m = std::chrono::duration_cast<std::chrono::minutes>(end_off_peak_time_local - date::floor<date::days>(end_off_peak_time_local));
 			auto next_event_local = date::make_zoned(date::current_zone(), next_event).get_local_time();
                         auto departure_m = std::chrono::duration_cast<std::chrono::minutes>(next_event_local - date::floor<date::days>(next_event_local));
+
+                        dict kwargs_sc;
+                        kwargs_sc["enable"] = false;
+                        //kwargs_sc["time"] = m.count();
+                        object ign_sc = vehicles[index].attr("command")(*make_tuple("SCHEDULED_CHARGING"), **kwargs_sc); 
 
                         dict kwargs_sd;
                         kwargs_sd["enable"] = true;
