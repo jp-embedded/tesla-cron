@@ -977,6 +977,7 @@ int main()
 
 			std::cout << std::endl;
 			std::cout << "--- " << car.vin << " ---" << std::endl;
+			std::cout << "Now:        " << date::make_zoned(date::current_zone(), now) << std::endl;
 			auto next_event = now + std::chrono::hours(24) - std::chrono::minutes(15); // latest time to schedule charging
 			for (auto &cal : car.calendars) {
 				auto event = get_next_event(cal, now);
