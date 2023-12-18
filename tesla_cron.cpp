@@ -1091,7 +1091,7 @@ int main()
                         int scheduled_charge_hours = (std::max(schedule_charge_limit, vd.charge_state.charge_limit_soc) - vd.charge_state.battery_level) * max_charge_hours / 100 + 1;
                         // Recalculate start time now the charge hours are known
                         auto start_time = find_cheapest_start(el_prices, scheduled_charge_hours, now, next_event);
-                        std::cout << "Charge start:     " << scheduled_charge_hours << "h at " << date::make_zoned(date::current_zone(), start_time) << std::endl;
+                        std::cout << "Cheapest start:   " << scheduled_charge_hours << "h at " << date::make_zoned(date::current_zone(), start_time) << std::endl;
 
                         // Scheduled charging must be set < 18h in the future. Otherwise it will start charging immediately.
                         const bool in_scheduled_charge_window = (start_time < now + std::chrono::hours(24 - max_charge_hours));
