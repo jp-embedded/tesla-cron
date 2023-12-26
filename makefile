@@ -22,7 +22,7 @@ OBJS :=	tesla_cron.o graph.o location.o icalendarlib/date.o icalendarlib/icalend
 CPPFLAGS := -Wall -Wpedantic -MD -MP -O2 
 CPPFLAGS += $(shell python3-config --includes)
 CPPFLAGS += -I date/include/
-CXXFLAGS := -std=c++11
+CXXFLAGS := -std=c++17 -ggdb
  
 all: tesla_cron
 
