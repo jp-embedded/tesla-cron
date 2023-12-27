@@ -1055,6 +1055,7 @@ int main()
                                           || (vd_cached.charge_state.battery_level < charge_now_limit) ) // wake up if battery level < charge_now_limit.
                                           || (in_scheduled_depart_window && vd_cached.charge_state.scheduled_charging_mode != "DepartBy")
                                           || (in_scheduled_charge_window && vd_cached.charge_state.scheduled_charging_mode != "ChargeAt")
+                                          || (!in_scheduled_depart_window && !in_scheduled_charge_window && vd_cached.charge_state.scheduled_charging_mode != "Off")
                                        ? state::update_data : state::end;
                                  }
                                  break;
