@@ -1110,8 +1110,7 @@ int main()
                                     std::cout << "Cheapest start:   " << scheduled_depart_hours << "h at " << date::make_zoned(date::current_zone(), start_time) << std::endl;
                                  }
                                  set_charge_limit(car.vin, charge_limit_depart);
-                                 // todo: try using off-peak start instead of manual start
-                                 scheduled_departure(car.vin, next_event, next_event, true);
+                                 scheduled_departure(car.vin, start_time, next_event, true);
                                  cur_state = state::end;
                                  break;
                               case state::scheduled_start:
