@@ -1029,7 +1029,7 @@ int main()
                            //std::cout << "Scheduled start: " << date::make_zoned(date::current_zone(), vd.charge_state.scheduled_charging_start_time) << std::endl;
                         };
 
-                        enum class state { init, sleeping, update_data, start_charge, disconnected, plugged, charging, depart_by, scheduled_start, no_schedule, set_charge_limit_min, end };
+                        enum class state { init, sleeping, update_data, start_charge, disconnected, plugged, charging, depart_by, scheduled_start, no_schedule, check_charge_limit_min, set_charge_limit_min, end };
 
                         state cur_state = state::init;
                         bool done = false;
@@ -1076,7 +1076,7 @@ int main()
                                  break;
                               case state::disconnected:
                                  std::cout << "-> disconnected" << std::endl;
-                                 cur_state = state::set_charge_limit_min;
+                                 cur_state = state::check_charge_limit_min;
                                  break;
                               case state::plugged:
                                  std::cout << "-> plugged" << std::endl;
@@ -1125,6 +1125,12 @@ int main()
                                  std::cout << "-> no_schedule" << std::endl;
                                  scheduled_disable(car.vin, start_time, next_event);
                                  cur_state = state::end;
+                                 break;
+                              case state::check_charge_limit_min:
+                                 std::cout << "-> check_charge_limit_min" << std::endl;
+                                 cur_state = 
+                                    (vd.charge_state.charge_limit_soc > charge_limit_min) ? state::set_charge_limit_min
+                                    : state::end;
                                  break;
                               case state::set_charge_limit_min:
                                  std::cout << "-> set_charge_limit_min" << std::endl;
