@@ -489,15 +489,15 @@ void scheduled_departure(std::string vin, date::sys_time<std::chrono::system_clo
 			auto next_event_local = date::make_zoned(date::current_zone(), next_event).get_local_time();
                         auto departure_m = std::chrono::duration_cast<std::chrono::minutes>(next_event_local - date::floor<date::days>(next_event_local));
 
-                        // Disable scheduled charging
+                        // Set scheduled charging
                         dict kwargs_sc;
-                        kwargs_sc["enable"] = false;
+                        kwargs_sc["enable"] = true;
                         kwargs_sc["time"] = end_off_peak_m.count();
                         object ign_sc = vehicles[index].attr("command")(*make_tuple("SCHEDULED_CHARGING"), **kwargs_sc); 
 
                         dict kwargs_sd;
                         kwargs_sd["enable"] = true;
-                        kwargs_sd["off_peak_charging_enabled"] = true;
+                        kwargs_sd["off_peak_charging_enabled"] = false;
                         kwargs_sd["preconditioning_enabled"] = preheat;
                         kwargs_sd["preconditioning_weekdays_only"] = false;
                         kwargs_sd["off_peak_charging_weekdays_only"] = false;
@@ -1053,8 +1053,10 @@ int main()
                                     cur_state = ( (earliest_start_time - std::chrono::hours(1) < now)    // Let car sleep until 1 hour before potential start. At this point we may need to start charging.
                                           || vd_cached.drive_state.moving                                // Ensure latest cached data is from parked state so we have a valid location.
                                           || (vd_cached.charge_state.battery_level < charge_now_limit) ) // wake up if battery level < charge_now_limit.
-                                          || (in_scheduled_depart_window && vd_cached.charge_state.scheduled_charging_mode != "DepartBy")
-                                          || (in_scheduled_charge_window && vd_cached.charge_state.scheduled_charging_mode != "ChargeAt")
+                                          || (in_scheduled_depart_window && ((vd_cached.charge_state.scheduled_charging_mode != "ChargeAt")
+							  		    || (vd.charge_state.charge_limit_soc < charge_limit_depart)))
+                                          || (in_scheduled_charge_window && ((vd_cached.charge_state.scheduled_charging_mode != "ChargeAt")
+							  		    || (vd.charge_state.charge_limit_soc < charge_limit_scheduled)))
                                           || (!in_scheduled_depart_window && !in_scheduled_charge_window && vd_cached.charge_state.scheduled_charging_mode != "Off")
                                        ? state::update_data : state::end;
                                  }
