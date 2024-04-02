@@ -565,7 +565,7 @@ std::string download_tarif_prices_energidataservice(std::string net, std::chrono
    // Round up end time to end of day / start of next day
    std::stringstream from_ss; from_ss << date::format("%Y-%m-01T00:00", from);
    std::stringstream to_ss; to_ss << date::format("%Y-%m-%dT00:00", to + std::chrono::hours(24));
-   std::string filter = "{\"ChargeOwner\":[\"" + net + "\"],\"Note\":[\"Nettarif C time\"]}";
+   std::string filter = "{\"ChargeOwner\":[\"" + net + "\"],\"Note\":[\"Nettarif C\",\"Nettarif C time\"]}";
    std::string url = "https://api.energidataservice.dk/dataset/DatahubPricelist?&start=" + from_ss.str() + "&end=" + to_ss.str() + "&filter=" + curlpp::escape(filter) + "&sort=ValidFrom%20DESC&timezone=utc";
 
    curlpp::Cleanup clean;
