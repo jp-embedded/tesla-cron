@@ -1029,7 +1029,7 @@ int main()
                            //std::cout << "Scheduled start: " << date::make_zoned(date::current_zone(), vd.charge_state.scheduled_charging_start_time) << std::endl;
                         };
 
-                        enum class state { init, sleeping, update_data, start_charge, disconnected, plugged, charging, depart_by, scheduled_start, no_schedule, check_charge_limit_min, set_charge_limit_min, end };
+                        enum class state { init, sleeping, update_data, start_charge, disconnected, plugged, charging, charging_depart_by, charging_scheduled_start, depart_by, scheduled_start, no_schedule, check_charge_limit_min, set_charge_limit_min, end };
 
                         state cur_state = state::init;
                         bool done = false;
@@ -1093,6 +1093,7 @@ int main()
                                     const bool in_scheduled_depart_window = (next_event < now + std::chrono::hours(20));
                                     // Scheduled charging must be set < 18h in the future. Otherwise it will start charging immediately.
                                     const bool in_scheduled_charge_window = (start_time < now + std::chrono::hours(24 - max_charge_hours));
+
                                     cur_state = in_scheduled_depart_window ? state::depart_by
                                        : in_scheduled_charge_window ? state::scheduled_start
                                        : state::no_schedule;
@@ -1100,9 +1101,35 @@ int main()
                                  break;
                               case state::charging:
                                  std::cout << "-> charging" << std::endl;
-                                 // don't interrupt charging
-                                 cur_state = state::end;
+                                 {
+                                    // Copy from plugged state
+                                    int scheduled_charge_hours = (std::max(charge_limit_scheduled, vd.charge_state.charge_limit_soc) - vd.charge_state.battery_level) * max_charge_hours / 100 + 1;
+                                    start_time = find_cheapest_start(el_prices, scheduled_charge_hours, now, next_event);
+                                    std::cout << "Cheapest start:   " << scheduled_charge_hours << "h at " << date::make_zoned(date::current_zone(), start_time) << std::endl;
+
+                                    // Use scheduled depart if < 20h from now.
+                                    const bool in_scheduled_depart_window = (next_event < now + std::chrono::hours(20)) && (vd.charge_state.charge_limit_soc < charge_limit_depart);
+                                    // Scheduled charging must be set < 18h in the future. Otherwise it will start charging immediately.
+                                    const bool in_scheduled_charge_window = (start_time < now + std::chrono::hours(24 - max_charge_hours)) && (vd.charge_state.charge_limit_soc < charge_limit_scheduled);
+                                    // don't interrupt charging, charging and limit could be started and set manually by user
+                                    // but update charge limit (upwards only) if charging into scheduled window
+                                    cur_state = in_scheduled_depart_window ? state::charging_depart_by
+                                       : in_scheduled_charge_window ? state::charging_scheduled_start
+                                       : state::end;
+                                 }
                                  break;
+                              case state::charging_depart_by:
+                                 std::cout << "-> charging_depart_by" << std::endl;
+                                 set_charge_limit(car.vin, charge_limit_depart);
+                                 start_charge(car.vin); // Start charge in the unlikely event charging has just stopped now.
+                                 cur_state = state::end;
+                              break;
+                              case state::charging_scheduled_start:
+                                 std::cout << "-> charging_scheduled_start" << std::endl;
+                                 set_charge_limit(car.vin, charge_limit_scheduled);
+                                 start_charge(car.vin); // Start charge in the unlikely event charging has just stopped now.
+                                 cur_state = state::end;
+                              break;
                               case state::depart_by:
                                  std::cout << "-> depart_by" << std::endl;
                                  {
