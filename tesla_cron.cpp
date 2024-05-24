@@ -207,6 +207,7 @@ std::string download_vehicle_data(std::string vin)
 	return std::string();
 }
 
+void scheduled_charging(std::string vin, date::sys_time<std::chrono::system_clock::duration> time, date::sys_time<std::chrono::system_clock::duration> next_event);
 void start_charge(std::string vin)
 {
 	using namespace boost::python;
@@ -230,6 +231,8 @@ void start_charge(std::string vin)
 				object ign = vehicles[index].attr("command")("START_CHARGE"); 
 			}
 			catch (...) {
+				std::cerr << "Warning: Could not start charge. Already started?" << std::endl;
+				PyErr_Print();
 			}
 
 			return;
