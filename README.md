@@ -1,6 +1,6 @@
 # tesla-cron
 
-Sorry for the lagging documentation - to be updated some day.  
+Sorry for the minimalistic documentation - to be improved some day.  
 
 ## What?
 ![](doc/graph_example.svg)
@@ -9,7 +9,7 @@ Sorry for the lagging documentation - to be updated some day.
 tesla-cron is a linux cron job which runs each hour and starts charging of your tesla when prices are cheapest before your next calendar event.
 
 - Can be configured with google calendar/ical links to ensure tesla is charged before next calender event with a "[T]" tag in the title.
-- Tesla Cron set the car's "Precontitioning" and "scheduled charging" to match the next calendar event. This ensures the Tesla will charge even if Tesla Cron or the car goes offline.
+- Tesla Cron set the car's "Precontitioning" and "scheduled charging" to charge when cheapest before the next calendar event. This also ensures the car will charge even if tesla-cron or the car goes offline.
 - Tesla Cron will not overrule and stop charging if you start charging manually, so you can still use the Tesla App as before to eg start charging manually.
 - Currently works in area DK1/DK2/SE3/SE3/NO2 (Denmark/Sweden/Norway)
 - Tesla is only woken up when charging is possibly started.
@@ -22,6 +22,9 @@ Tested on Ubuntu 20.04 LTS.
 
 ### Prerequisites
 
+With Tesla's new Vehicle Command SDK, which is now required, you will need a domain configured with TSL to be able to send commands to your Tesla. The tesla-http-proxy is currently the recommended way to use this. More info on getting this setup here: [https://github.com/teslamotors/vehicle-command](https://github.com/teslamotors/vehicle-command). Once this is working, place the tesla-http-proxy in the path and tesla-cron will automatically start and stop this proxy.
+
+These are the prerequisites needed to build tesla-cron:
 ```
 $sudo apt install build-essential libboost-all-dev libcurlpp-dev libcurl4-openssl-dev rapidjson-dev python3-pip librrd-dev
 $sudo python3 -m pip install teslapy reverse_geocoder
@@ -30,9 +33,9 @@ $sudo python3 -m pip install teslapy reverse_geocoder
 ### Configuring
 Currently the configuration is hardcoded in config.inc. Edit this file to match your account. The configuration supports one tesla account with multiple cars each with multiple accosiated calendars. You need to use the private ical address for tesla-cron to be able to read the calendar titles.
 
-Generate an access token. This can be generated at eg TeslaFi or the Tesla Access Token Generator chrome extension. Use the auth.py script to store this:
+Generate an access token. Use the auth.sh script to generate and store it. (You need to edit the script and set the 3 parameters at top):
 ```
-$python3 auth.py
+$./auth.sh
 ```
 ### Carnot
 If you want to use carnot for future price predictions, create an account at carnot.dk to generate an apikey. Add this apikey co config.inc. Carnot will try to predict prices about a weak ahead. Without Carnot, future prices are known for only about a day ahead.
