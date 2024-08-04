@@ -22,6 +22,8 @@ Tested on Ubuntu 20.04 LTS.
 
 ### Prerequisites
 
+With Tesla's new Vehicle Command SDK, which is now required, you will need a domain configured with TSL to be able to send commands to your Tesla. The tesla-http-proxy is currently the recommended way to use this. More info on getting this setup here: [https://github.com/teslamotors/vehicle-command](https://github.com/teslamotors/vehicle-command). Once this is working, place the tesla-http-proxy in the path and tesla-cron will automatically start and stop this proxy.
+
 ```
 $sudo apt install build-essential libboost-all-dev libcurlpp-dev libcurl4-openssl-dev rapidjson-dev python3-pip librrd-dev
 $sudo python3 -m pip install teslapy reverse_geocoder
@@ -30,9 +32,9 @@ $sudo python3 -m pip install teslapy reverse_geocoder
 ### Configuring
 Currently the configuration is hardcoded in config.inc. Edit this file to match your account. The configuration supports one tesla account with multiple cars each with multiple accosiated calendars. You need to use the private ical address for tesla-cron to be able to read the calendar titles.
 
-Generate an access token. This can be generated at eg TeslaFi or the Tesla Access Token Generator chrome extension. Use the auth.py script to store this:
+Generate an access token. Use the auth.sh script to generate and store it:
 ```
-$python3 auth.py
+$./auth.sh
 ```
 ### Carnot
 If you want to use carnot for future price predictions, create an account at carnot.dk to generate an apikey. Add this apikey co config.inc. Carnot will try to predict prices about a weak ahead. Without Carnot, future prices are known for only about a day ahead.
