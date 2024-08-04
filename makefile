@@ -18,7 +18,7 @@
 #*************************************************************************/
 
 
-OBJS :=	tesla_cron.o graph.o location.o icalendarlib/date.o icalendarlib/icalendar.o icalendarlib/types.o date/src/tz.o ReverseGeocode.o elnet-forsyningsgraenser-022020.o
+OBJS :=	tesla_cron.o graph.o location.o icalendarlib/date.o icalendarlib/icalendar.o icalendarlib/types.o date/src/tz.o ReverseGeocode.o elnet-forsyningsgraenser-022020.o tesla-api.o
 CPPFLAGS := -Wall -Wpedantic -MD -MP -O2 
 CPPFLAGS += $(shell python3-config --includes)
 CPPFLAGS += -I date/include/
