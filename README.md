@@ -24,6 +24,7 @@ Tested on Ubuntu 20.04 LTS.
 
 With Tesla's new Vehicle Command SDK, which is now required, you will need a domain configured with TSL to be able to send commands to your Tesla. The tesla-http-proxy is currently the recommended way to use this. More info on getting this setup here: [https://github.com/teslamotors/vehicle-command](https://github.com/teslamotors/vehicle-command). Once this is working, place the tesla-http-proxy in the path and tesla-cron will automatically start and stop this proxy.
 
+These are the prerequisites needed to build tesla-cron:
 ```
 $sudo apt install build-essential libboost-all-dev libcurlpp-dev libcurl4-openssl-dev rapidjson-dev python3-pip librrd-dev
 $sudo python3 -m pip install teslapy reverse_geocoder
