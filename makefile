@@ -31,7 +31,7 @@ tesla_cron: $(OBJS)
 
 install:
 	install tesla_cron /usr/local/bin/
-	echo "1 * * * *	root	/usr/local/bin/tesla_cron >> /var/log/tesla_cron.log" > /etc/cron.d/tesla_cron
+	echo "1 * * * *	root	su -l -c /usr/local/bin/tesla_cron >> /var/log/tesla_cron.log" > /etc/cron.d/tesla_cron
 
 clean:
 	rm -f $(OBJS) $(OBJS:.o=.d) tesla_cron elnet-forsyningsgraenser-022020.cpp
