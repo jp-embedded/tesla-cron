@@ -179,380 +179,6 @@ int get_vehicle_index(const boost::python::object &vehicles, std::string vin)
 	return index;
 }
 
-// todo: obsolete
-std::string download_vehicle_data(std::string vin)
-{
-	std::cout << "obsolete: " << __FUNCTION__ << std::endl;
-	exit(0);
-	using namespace boost::python;
-
-	int timeout = 10;
-	while (true) {
-		try {
-			object teslapy = import("teslapy");
-
-			object tesla = teslapy.attr("Tesla")(account.email, true, NULL, 0, 10, "tesla_cron", NULL, "/var/tmp/tesla_cron.json");
-			object authorized = tesla.attr("authorized"); 
-			if (!extract<bool>(authorized)) throw std::runtime_error("Not authorized");
-
-			object vehicles = tesla.attr("vehicle_list")();
-			int index = get_vehicle_index(vehicles, vin);
-
-			object sync_waue_up = vehicles[index].attr("sync_wake_up")(); 
-
-			object data = vehicles[index].attr("get_vehicle_data")(); 
-			//std::cout << extract<std::string>(str(data))() << std::endl;
-			return extract<std::string>(str(data))();
-		}
-		catch( error_already_set &) {
-			PyErr_Print();
-			if (--timeout == 0) throw;
-		}
-		catch (std::exception &e) {
-			std::cerr << "Error: " << e.what() << std::endl;
-			if (--timeout == 0) throw;
-		}
-		std::this_thread::sleep_for(std::chrono::minutes(1));
-	}
-	return std::string();
-}
-
-// todo: obsolete
-void scheduled_charging(std::string vin, date::sys_time<std::chrono::system_clock::duration> time, date::sys_time<std::chrono::system_clock::duration> next_event);
-void start_charge(std::string vin)
-{
-	std::cout << "obsolete: " << __FUNCTION__ << std::endl;
-	exit(0);
-	using namespace boost::python;
-
-	int timeout = 10;
-	while (true) {
-		try {
-			object teslapy = import("teslapy");
-
-			object tesla = teslapy.attr("Tesla")(account.email, true, NULL, 0, 10, "tesla_cron", NULL, "/var/tmp/tesla_cron.json");
-			object authorized = tesla.attr("authorized"); 
-			if (!extract<bool>(authorized)) throw std::runtime_error("Not authorized");
-
-			object vehicles = tesla.attr("vehicle_list")();
-			int index = get_vehicle_index(vehicles, vin);
-
-			object sync_waue_up = vehicles[index].attr("sync_wake_up")(); 
-
-			// Fails if already charging or eg disconnected. todo: verify state after start
-			try {
-				object ign = vehicles[index].attr("command")("START_CHARGE"); 
-			}
-			catch (...) {
-				std::cerr << "Warning: Could not start charge. Already started?" << std::endl;
-				PyErr_Print();
-			}
-
-			return;
-		}
-		catch( error_already_set &) {
-			PyErr_Print();
-			if (--timeout == 0) throw;
-		}
-		catch (std::exception &e) {
-			std::cerr << "Error: " << e.what() << std::endl;
-			if (--timeout == 0) throw;
-		}
-		std::this_thread::sleep_for(std::chrono::minutes(1));
-	}
-}
-
-// todo: obsolete
-void stop_charge(std::string vin)
-{
-	std::cout << "obsolete: " << __FUNCTION__ << std::endl;
-	exit(0);
-	using namespace boost::python;
-
-	int timeout = 10;
-	while (true) {
-		try {
-			object teslapy = import("teslapy");
-
-			object tesla = teslapy.attr("Tesla")(account.email, true, NULL, 0, 10, "tesla_cron", NULL, "/var/tmp/tesla_cron.json");
-			object authorized = tesla.attr("authorized"); 
-			if (!extract<bool>(authorized)) throw std::runtime_error("Not authorized");
-
-			object vehicles = tesla.attr("vehicle_list")();
-			int index = get_vehicle_index(vehicles, vin);
-
-			object sync_waue_up = vehicles[index].attr("sync_wake_up")(); 
-
-			// Fails if already charging or eg disconnected. todo: verify state after start
-			try {
-				object ign = vehicles[index].attr("command")("STOP_CHARGE"); 
-			}
-			catch (...) {
-			}
-
-			return;
-		}
-		catch( error_already_set &) {
-			PyErr_Print();
-			if (--timeout == 0) throw;
-		}
-		catch (std::exception &e) {
-			std::cerr << "Error: " << e.what() << std::endl;
-			if (--timeout == 0) throw;
-		}
-		std::this_thread::sleep_for(std::chrono::minutes(1));
-	}
-}
-
-// todo: obsolete
-void set_charge_limit(std::string vin, int percent)
-{
-	std::cout << "obsolete: " << __FUNCTION__ << std::endl;
-	exit(0);
-	using namespace boost::python;
-
-	int timeout = 10;
-	while (true) {
-		try {
-			object teslapy = import("teslapy");
-
-			object tesla = teslapy.attr("Tesla")(account.email, true, NULL, 0, 10, "tesla_cron", NULL, "/var/tmp/tesla_cron.json");
-			object authorized = tesla.attr("authorized"); 
-			if (!extract<bool>(authorized)) throw std::runtime_error("Not authorized");
-
-			object vehicles = tesla.attr("vehicle_list")();
-			int index = get_vehicle_index(vehicles, vin);
-
-			object sync_waue_up = vehicles[index].attr("sync_wake_up")(); 
-
-			try {
-                                dict kwargs;
-                                kwargs["percent"] = percent;
-				object ign = vehicles[index].attr("command")(*make_tuple("CHANGE_CHARGE_LIMIT"), **kwargs); 
-			}
-			catch (...) {
-			}
-
-			return;
-		}
-		catch( error_already_set &) {
-			PyErr_Print();
-			if (--timeout == 0) throw;
-		}
-		catch (std::exception &e) {
-			std::cerr << "Error: " << e.what() << std::endl;
-			if (--timeout == 0) throw;
-		}
-		std::this_thread::sleep_for(std::chrono::minutes(1));
-	}
-}
-
-
-// todo obsolete
-bool available(std::string vin)
-{
-	exit(0);
-	using namespace boost::python;
-
-	int timeout = 10;
-	while (true) {
-		try {
-			object teslapy = import("teslapy");
-
-			object tesla = teslapy.attr("Tesla")(account.email, true, NULL, 0, 10, "tesla_cron", NULL, "/var/tmp/tesla_cron.json");
-			object authorized = tesla.attr("authorized"); 
-			if (!extract<bool>(authorized)) throw std::runtime_error("Not authorized");
-
-			object vehicles = tesla.attr("vehicle_list")();
-			int index = get_vehicle_index(vehicles, vin);
-
-                        object available = vehicles[index].attr("available")(); 
-                        return extract<bool>(available);
-		}
-		catch( error_already_set &) {
-			PyErr_Print();
-			if (--timeout == 0) throw;
-		}
-		catch (std::exception &e) {
-			std::cerr << "Error: " << e.what() << std::endl;
-			if (--timeout == 0) throw;
-		}
-		std::this_thread::sleep_for(std::chrono::minutes(1));
-	}
-}
-
-// todo: obsolete
-void scheduled_charging(std::string vin, date::sys_time<std::chrono::system_clock::duration> time, date::sys_time<std::chrono::system_clock::duration> next_event)
-{
-	std::cout << "obsolete: " << __FUNCTION__ << std::endl;
-	exit(0);
-	using namespace boost::python;
-
-	int timeout = 10;
-	while (true) {
-		try {
-			object teslapy = import("teslapy");
-
-			object tesla = teslapy.attr("Tesla")(account.email, true, NULL, 0, 10, "tesla_cron", NULL, "/var/tmp/tesla_cron.json");
-			object authorized = tesla.attr("authorized"); 
-			if (!extract<bool>(authorized)) throw std::runtime_error("Not authorized");
-
-			object vehicles = tesla.attr("vehicle_list")();
-			int index = get_vehicle_index(vehicles, vin);
-
-                        object sync_waue_up = vehicles[index].attr("sync_wake_up")(); 
-
-                        // todo: zone should be tesla's time zone
-			auto time_local = date::make_zoned(date::current_zone(), time).get_local_time();
-                        auto m = std::chrono::duration_cast<std::chrono::minutes>(time_local - date::floor<date::days>(time_local));
-
-                        // Disable scheduled departure
-			auto next_event_local = date::make_zoned(date::current_zone(), next_event).get_local_time();
-                        auto departure_m = std::chrono::duration_cast<std::chrono::minutes>(next_event_local - date::floor<date::days>(next_event_local));
-                        dict kwargs_sd;
-                        kwargs_sd["enable"] = false;
-                        kwargs_sd["off_peak_charging_enabled"] = false;
-                        kwargs_sd["preconditioning_enabled"] = false;
-                        kwargs_sd["preconditioning_weekdays_only"] = false;
-                        kwargs_sd["off_peak_charging_weekdays_only"] = false;
-                        kwargs_sd["departure_time"] = departure_m.count();
-                        kwargs_sd["end_off_peak_time"] = departure_m.count();
-                        object ign = vehicles[index].attr("command")(*make_tuple("SCHEDULED_DEPARTURE"), **kwargs_sd); 
-
-                        dict kwargs_sc;
-                        kwargs_sc["enable"] = true;
-                        kwargs_sc["time"] = m.count();
-                        object ign_sc = vehicles[index].attr("command")(*make_tuple("SCHEDULED_CHARGING"), **kwargs_sc); 
-
-			return;
-		}
-		catch( error_already_set &) {
-			PyErr_Print();
-			if (--timeout == 0) throw;
-		}
-		catch (std::exception &e) {
-			std::cerr << "Error: " << e.what() << std::endl;
-			if (--timeout == 0) throw;
-		}
-		std::this_thread::sleep_for(std::chrono::minutes(1));
-	}
-}
-
-// todo: obsolete
-void scheduled_disable(std::string vin, date::sys_time<std::chrono::system_clock::duration> time, date::sys_time<std::chrono::system_clock::duration> next_event)
-{
-	std::cout << "obsolete: " << __FUNCTION__ << std::endl;
-	exit(0);
-	using namespace boost::python;
-
-	int timeout = 10;
-	while (true) {
-		try {
-			object teslapy = import("teslapy");
-
-			object tesla = teslapy.attr("Tesla")(account.email, true, NULL, 0, 10, "tesla_cron", NULL, "/var/tmp/tesla_cron.json");
-			object authorized = tesla.attr("authorized"); 
-			if (!extract<bool>(authorized)) throw std::runtime_error("Not authorized");
-
-			object vehicles = tesla.attr("vehicle_list")();
-			int index = get_vehicle_index(vehicles, vin);
-
-                        object sync_waue_up = vehicles[index].attr("sync_wake_up")(); 
-
-                        // todo: zone should be tesla's time zone
-			auto time_local = date::make_zoned(date::current_zone(), time).get_local_time();
-                        auto m = std::chrono::duration_cast<std::chrono::minutes>(time_local - date::floor<date::days>(time_local));
-
-                        // Disable scheduled departure
-			auto next_event_local = date::make_zoned(date::current_zone(), next_event).get_local_time();
-                        auto departure_m = std::chrono::duration_cast<std::chrono::minutes>(next_event_local - date::floor<date::days>(next_event_local));
-                        dict kwargs_sd;
-                        kwargs_sd["enable"] = false;
-                        kwargs_sd["off_peak_charging_enabled"] = false;
-                        kwargs_sd["preconditioning_enabled"] = false;
-                        kwargs_sd["preconditioning_weekdays_only"] = false;
-                        kwargs_sd["off_peak_charging_weekdays_only"] = false;
-                        kwargs_sd["departure_time"] = departure_m.count();
-                        kwargs_sd["end_off_peak_time"] = departure_m.count();
-                        object ign = vehicles[index].attr("command")(*make_tuple("SCHEDULED_DEPARTURE"), **kwargs_sd); 
-
-                        // Disable scheduled charging
-                        dict kwargs_sc;
-                        kwargs_sc["enable"] = false;
-                        kwargs_sc["time"] = m.count();
-                        object ign_sc = vehicles[index].attr("command")(*make_tuple("SCHEDULED_CHARGING"), **kwargs_sc); 
-
-			return;
-		}
-		catch( error_already_set &) {
-			PyErr_Print();
-			if (--timeout == 0) throw;
-		}
-		catch (std::exception &e) {
-			std::cerr << "Error: " << e.what() << std::endl;
-			if (--timeout == 0) throw;
-		}
-		std::this_thread::sleep_for(std::chrono::minutes(1));
-	}
-}
-
-// todo: obsolete
-void scheduled_departure(std::string vin, date::sys_time<std::chrono::system_clock::duration> end_off_peak_time, date::sys_time<std::chrono::system_clock::duration> next_event, bool preheat)
-{
-	std::cout << "obsolete: " << __FUNCTION__ << std::endl;
-	exit(0);
-	using namespace boost::python;
-
-	int timeout = 10;
-	while (true) {
-		try {
-			object teslapy = import("teslapy");
-
-			object tesla = teslapy.attr("Tesla")(account.email, true, NULL, 0, 10, "tesla_cron", NULL, "/var/tmp/tesla_cron.json");
-			object authorized = tesla.attr("authorized"); 
-			if (!extract<bool>(authorized)) throw std::runtime_error("Not authorized");
-
-			object vehicles = tesla.attr("vehicle_list")();
-			int index = get_vehicle_index(vehicles, vin);
-
-                        object sync_waue_up = vehicles[index].attr("sync_wake_up")(); 
-
-                        // todo: zone should be tesla's time zone
-			auto end_off_peak_time_local = date::make_zoned(date::current_zone(), end_off_peak_time).get_local_time();
-                        auto end_off_peak_m = std::chrono::duration_cast<std::chrono::minutes>(end_off_peak_time_local - date::floor<date::days>(end_off_peak_time_local));
-			auto next_event_local = date::make_zoned(date::current_zone(), next_event).get_local_time();
-                        auto departure_m = std::chrono::duration_cast<std::chrono::minutes>(next_event_local - date::floor<date::days>(next_event_local));
-
-                        // Set scheduled charging
-                        dict kwargs_sc;
-                        kwargs_sc["enable"] = true;
-                        kwargs_sc["time"] = end_off_peak_m.count();
-                        object ign_sc = vehicles[index].attr("command")(*make_tuple("SCHEDULED_CHARGING"), **kwargs_sc); 
-
-                        dict kwargs_sd;
-                        kwargs_sd["enable"] = true;
-                        kwargs_sd["off_peak_charging_enabled"] = false;
-                        kwargs_sd["preconditioning_enabled"] = preheat;
-                        kwargs_sd["preconditioning_weekdays_only"] = false;
-                        kwargs_sd["off_peak_charging_weekdays_only"] = false;
-                        kwargs_sd["departure_time"] = departure_m.count();
-                        kwargs_sd["end_off_peak_time"] = end_off_peak_m.count();
-                        object ign = vehicles[index].attr("command")(*make_tuple("SCHEDULED_DEPARTURE"), **kwargs_sd); 
-
-			return;
-		}
-		catch( error_already_set &) {
-			PyErr_Print();
-			if (--timeout == 0) throw;
-		}
-		catch (std::exception &e) {
-			std::cerr << "Error: " << e.what() << std::endl;
-			if (--timeout == 0) throw;
-		}
-		std::this_thread::sleep_for(std::chrono::minutes(1));
-	}
-}
-
 void save_vehicle_data(std::string vin, std::string data)
 {
 	std::string f_path = "/var/tmp/tesla-cron";
@@ -1006,7 +632,7 @@ date::sys_time<std::chrono::system_clock::duration> get_next_event(std::string c
 
 int main()
 {
-	// todo: make /var/tmp/tesla-cron if not exist
+	mkdir("/var/tmp/tesla-cron", 0600);
 	
 	tesla_api api;
 	api.refresh_token();
@@ -1118,7 +744,7 @@ int main()
                                  break;
                               case state::start_charge:
                                  std::cout << "-> start_charge" << std::endl;
-                                 start_charge(car.vin);
+                                 api.start_charge(car.vin);
                                  cur_state = state::charging;
                                  break;
                               case state::disconnected:
@@ -1168,13 +794,13 @@ int main()
                               case state::charging_depart_by:
                                  std::cout << "-> charging_depart_by" << std::endl;
                                  api.set_charge_limit(car.vin, charge_limit_depart);
-                                 start_charge(car.vin); // Start charge in the unlikely event charging has just stopped now.
+                                 api.start_charge(car.vin); // Start charge in the unlikely event charging has just stopped now.
                                  cur_state = state::end;
                               break;
                               case state::charging_scheduled_start:
                                  std::cout << "-> charging_scheduled_start" << std::endl;
                                  api.set_charge_limit(car.vin, charge_limit_scheduled);
-                                 start_charge(car.vin); // Start charge in the unlikely event charging has just stopped now.
+                                 api.start_charge(car.vin); // Start charge in the unlikely event charging has just stopped now.
                                  cur_state = state::end;
                               break;
                               case state::depart_by:
@@ -1186,18 +812,18 @@ int main()
                                     std::cout << "Cheapest start:   " << scheduled_depart_hours << "h at " << date::make_zoned(date::current_zone(), start_time) << std::endl;
                                  }
                                  api.set_charge_limit(car.vin, charge_limit_depart);
-                                 scheduled_departure(car.vin, start_time, next_event, true);
+                                 api.scheduled_departure(car.vin, start_time, next_event, true);
                                  cur_state = state::end;
                                  break;
                               case state::scheduled_start:
                                  std::cout << "-> scheduled_start" << std::endl;
                                  api.set_charge_limit(car.vin, charge_limit_scheduled);
-                                 scheduled_charging(car.vin, start_time, next_event);
+                                 api.scheduled_charging(car.vin, start_time, next_event);
                                  cur_state = state::end;
                                  break;
                               case state::no_schedule:
                                  std::cout << "-> no_schedule" << std::endl;
-                                 scheduled_disable(car.vin, start_time, next_event);
+                                 api.scheduled_disable(car.vin, start_time, next_event);
                                  cur_state = state::end;
                                  break;
                               case state::check_charge_limit_min:

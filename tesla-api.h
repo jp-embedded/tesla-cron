@@ -21,6 +21,9 @@
 #define __TESLA_API_H
 
 #include <string>
+#include <chrono>
+#include <date/date.h>
+#include <date/tz.h>
 
 class tesla_api
 {
@@ -28,8 +31,12 @@ class tesla_api
 	void refresh_token();
 	bool available(std::string vin);
 	void wake_up(std::string vin);
+	void start_charge(std::string vin);
 	std::string vehicle_data(std::string vin);
 	void set_charge_limit(std::string vin, int percent);
+	void scheduled_departure(std::string vin, date::sys_time<std::chrono::system_clock::duration> end_off_peak_time, date::sys_time<std::chrono::system_clock::duration> next_event, bool preheat);
+	void scheduled_charging(std::string vin, date::sys_time<std::chrono::system_clock::duration> time, date::sys_time<std::chrono::system_clock::duration> next_event);
+	void scheduled_disable(std::string vin, date::sys_time<std::chrono::system_clock::duration> time, date::sys_time<std::chrono::system_clock::duration> next_event);
 
 	protected:
 	std::string m_token;
