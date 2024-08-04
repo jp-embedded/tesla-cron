@@ -1,6 +1,6 @@
 # tesla-cron
 
-Sorry for the lagging documentation - to be updated some day.  
+Sorry for the minimalistic documentation - to be improved some day.  
 
 ## What?
 ![](doc/graph_example.svg)
