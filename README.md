@@ -33,7 +33,7 @@ $sudo python3 -m pip install teslapy reverse_geocoder
 ### Configuring
 Currently the configuration is hardcoded in config.inc. Edit this file to match your account. The configuration supports one tesla account with multiple cars each with multiple accosiated calendars. You need to use the private ical address for tesla-cron to be able to read the calendar titles.
 
-Generate an access token. Use the auth.sh script to generate and store it:
+Generate an access token. Use the auth.sh script to generate and store it. You need edit the script and set the 3 parameters at top:
 ```
 $./auth.sh
 ```
