@@ -58,19 +58,21 @@ namespace {
 
 		Document doc;
 		doc.Parse(data.c_str());
-		if (debug) std::cout << "parse_result: " << data.c_str() << std::endl;
 
 		if (!doc.IsObject() || !doc.HasMember("response")) throw std::runtime_error("No response");
 		const Value &response = doc["response"];
-		if (!response.IsObject() || !response.HasMember("result")) throw std::runtime_error("No result");
-		const Value &result = response["result"]; 
-		if (!result.IsBool()) throw std::runtime_error("Unexpected result format");
-		if (result.GetBool()) return true;
+		if (!response.IsObject()) throw std::runtime_error("No result");
 
 		// ignore error if it's "already_set" 
 		if (response.HasMember("string") && string(response["string"].GetString()).find("already_set") != string::npos) return true;
+		if (response.HasMember("result")) {
+			const Value &result = response["result"]; 
+			if (!result.IsBool()) throw std::runtime_error("Unexpected result format");
+			return result.GetBool();
+		}
 
-		return false;
+		// Some form of response received
+		return true;
 	}
 }
 
@@ -78,219 +80,284 @@ void tesla_api::refresh_token()
 {
 	start_proxy();
 
-	ifstream is_refresh(refresh_token_file);
-	if (!is_refresh) throw runtime_error("Can't read refresh token");
-	string refresh_token;
-	is_refresh >> refresh_token;
-	is_refresh.close();
+	int timeout = 10;
+	while (true) {
+		try {
+			ifstream is_refresh(refresh_token_file);
+			if (!is_refresh) throw runtime_error("Can't read refresh token");
+			string refresh_token;
+			is_refresh >> refresh_token;
+			is_refresh.close();
 
-	string url = "https://auth.tesla.com/oauth2/v3/token";
-	if (debug) cout << "url     :    " << url << endl;
+			string url = "https://auth.tesla.com/oauth2/v3/token";
+			if (debug) cout << "url     :    " << url << endl;
 
-	curlpp::Cleanup clean;
-	curlpp::Easy r;
-	r.setOpt(new curlpp::options::Url(url));
+			curlpp::Cleanup clean;
+			curlpp::Easy r;
+			r.setOpt(new curlpp::options::Url(url));
 
-	list<string> headers;
-	headers.push_back("Content-Type: application/json");
-	r.setOpt(new curlpp::options::HttpHeader(headers));
+			list<string> headers;
+			headers.push_back("Content-Type: application/json");
+			r.setOpt(new curlpp::options::HttpHeader(headers));
 
-	string body;
-	body += '{';
-	body += "\"grant_type\": \"refresh_token\"";
-	body += ", \"client_id\": \"" + account.tesla_client_id + '"';
-	body += ", \"refresh_token\": \"" + refresh_token + '"';
-	body += '}';
-	r.setOpt(new curlpp::options::PostFields(body));
-	r.setOpt(new curlpp::options::PostFieldSize(body.length()));
+			string body;
+			body += '{';
+			body += "\"grant_type\": \"refresh_token\"";
+			body += ", \"client_id\": \"" + account.tesla_client_id + '"';
+			body += ", \"refresh_token\": \"" + refresh_token + '"';
+			body += '}';
+			r.setOpt(new curlpp::options::PostFields(body));
+			r.setOpt(new curlpp::options::PostFieldSize(body.length()));
 
-	ostringstream os_response;
-	r.setOpt(new curlpp::options::WriteStream(&os_response));
+			ostringstream os_response;
+			r.setOpt(new curlpp::options::WriteStream(&os_response));
 
-	r.perform();
-	string response_data = os_response.str();
-	if (response_data.size() == 0) throw runtime_error("No reply from server");
+			r.perform();
+			string response_data = os_response.str();
+			if (response_data.size() == 0) throw runtime_error("No reply from server");
 
-	if (debug) cout << "Response:    " << response_data << endl;
+			if (debug) cout << "Response:    " << response_data << endl;
 
-	Document doc;
-	doc.Parse(response_data.c_str());
-	const Value &new_access_token = doc["access_token"];
-	if (!new_access_token.IsString()) throw runtime_error("Got no new access token");
-	const Value &new_refresh_token = doc["refresh_token"];
-	if (!new_refresh_token.IsString()) throw runtime_error("Got no new refresh token");
-	
-	//cout << "New access:  " << new_access_token.GetString() << endl;
-	//cout << "New refresh: " << new_refresh_token.GetString() << endl;
+			Document doc;
+			doc.Parse(response_data.c_str());
+			const Value &new_access_token = doc["access_token"];
+			if (!new_access_token.IsString()) throw runtime_error("Got no new access token");
+			const Value &new_refresh_token = doc["refresh_token"];
+			if (!new_refresh_token.IsString()) throw runtime_error("Got no new refresh token");
 
-	ofstream os_access(access_token_file);
-	os_access << new_access_token.GetString();
-	if (!os_access) throw runtime_error("Could not write new access token");
-	ofstream os_refresh(refresh_token_file);
-	os_refresh << new_refresh_token.GetString();
-	if (!os_refresh) throw runtime_error("Could not write new refresh token");
+			//cout << "New access:  " << new_access_token.GetString() << endl;
+			//cout << "New refresh: " << new_refresh_token.GetString() << endl;
 
-	// Ensure noone have read permission without write permission. Otherwise running tesla-cron as another user
-	// results in reading the refresh token, refreshing the token but unable to write the new token.
-	os_access.close();
-	os_refresh.close();
-	chmod(access_token_file.c_str(), S_IRUSR | S_IWUSR);
-	chmod(refresh_token_file.c_str(), S_IRUSR | S_IWUSR);
+			ofstream os_access(access_token_file);
+			os_access << new_access_token.GetString();
+			if (!os_access) throw runtime_error("Could not write new access token");
+			ofstream os_refresh(refresh_token_file);
+			os_refresh << new_refresh_token.GetString();
+			if (!os_refresh) throw runtime_error("Could not write new refresh token");
 
-	m_token = new_access_token.GetString();
+			// Ensure noone have read permission without write permission. Otherwise running tesla-cron as another user
+			// results in reading the refresh token, refreshing the token but unable to write the new token.
+			os_access.close();
+			os_refresh.close();
+			chmod(access_token_file.c_str(), S_IRUSR | S_IWUSR);
+			chmod(refresh_token_file.c_str(), S_IRUSR | S_IWUSR);
+
+			m_token = new_access_token.GetString();
+			break;
+		}
+		catch (std::exception &e) {
+			std::cerr << "Error: " << e.what() << std::endl;
+			if (--timeout == 0) throw;
+		}
+		std::this_thread::sleep_for(std::chrono::minutes(1));
+	}
+
 }
 
 bool tesla_api::available(string vin)
 {
-	string url = account.tesla_audience + "/api/1/vehicles/" + vin; 
+	int timeout = 10;
+	while (true) {
+		try {
+			string url = account.tesla_audience + "/api/1/vehicles/" + vin; 
+			if (debug) cout << "url     :    " << url << endl;
 
-	curlpp::Cleanup clean;
-	curlpp::Easy r;
-	r.setOpt(new curlpp::options::Url(url));
+			curlpp::Cleanup clean;
+			curlpp::Easy r;
+			r.setOpt(new curlpp::options::Url(url));
 
-	list<string> headers;
-	headers.push_back("Content-Type: application/json");
-	headers.push_back("Authorization: Bearer " + m_token);
-	r.setOpt(new curlpp::options::HttpHeader(headers));
+			list<string> headers;
+			headers.push_back("Content-Type: application/json");
+			headers.push_back("Authorization: Bearer " + m_token);
+			r.setOpt(new curlpp::options::HttpHeader(headers));
 
-	ostringstream os_response;
-	r.setOpt(new curlpp::options::WriteStream(&os_response));
+			ostringstream os_response;
+			r.setOpt(new curlpp::options::WriteStream(&os_response));
 
-	r.perform();
-	string response_data = os_response.str();
-	if (response_data.size() == 0) throw runtime_error("No reply from server");
+			r.perform();
+			string response_data = os_response.str();
+			if (response_data.size() == 0) throw runtime_error("No reply from server");
 
-	if (debug) cout << "Response:    " << response_data << endl;
+			if (debug) cout << "Response:    " << response_data << endl;
 
-	Document doc;
-	doc.Parse(response_data.c_str());
-	const Value &response = doc["response"];
-	const Value &state = response["state"];
-	if (!state.IsString()) throw runtime_error("No vehicle state");
-	
-	if (debug) cout << "State:       " << state.GetString() << endl;
+			Document doc;
+			doc.Parse(response_data.c_str());
+			const Value &response = doc["response"];
+			const Value &state = response["state"];
+			if (!state.IsString()) throw runtime_error("No vehicle state");
 
-	return state.GetString() == string("online");
+			return state.GetString() == string("online");
+		}
+		catch (std::exception &e) {
+			std::cerr << "Error: " << e.what() << std::endl;
+			if (--timeout == 0) throw;
+		}
+		std::this_thread::sleep_for(std::chrono::minutes(1));
+	}
+	return false;
 }
 
 void tesla_api::wake_up(string vin)
 {
-	string url = account.tesla_audience + "/api/1/vehicles/" + vin + "/wake_up"; 
-	if (debug) cout << "url     :    " << url << endl;
-
-	curlpp::Cleanup clean;
-	curlpp::Easy r;
-	r.setOpt(new curlpp::options::Url(url));
-
-	list<string> headers;
-	headers.push_back("Content-Type: application/json");
-	headers.push_back("Authorization: Bearer " + m_token);
-	r.setOpt(new curlpp::options::HttpHeader(headers));
-
-	string body;
-	r.setOpt(new curlpp::options::PostFields(body));
-	r.setOpt(new curlpp::options::PostFieldSize(body.length()));
-
-	ostringstream os_response;
-	r.setOpt(new curlpp::options::WriteStream(&os_response));
-
-	r.perform();
-	string response_data = os_response.str();
-
-	if (debug) cout << "Response:    " << response_data << endl;
-	if (!parse_result(response_data)) throw runtime_error("wake_up failed");
-
-	int timeout = 1;
+	int timeout = 3;
 	while (true) {
-		this_thread::sleep_for(chrono::seconds(15));
-		if (available(vin)) break;
-		if (--timeout == 0) throw runtime_error("Could not wake car");
+		try {
+			string url = account.tesla_audience + "/api/1/vehicles/" + vin + "/wake_up"; 
+			if (debug) cout << "url     :    " << url << endl;
+
+			curlpp::Cleanup clean;
+			curlpp::Easy r;
+			r.setOpt(new curlpp::options::Url(url));
+
+			list<string> headers;
+			headers.push_back("Content-Type: application/json");
+			headers.push_back("Authorization: Bearer " + m_token);
+			r.setOpt(new curlpp::options::HttpHeader(headers));
+
+			string body;
+			r.setOpt(new curlpp::options::PostFields(body));
+			r.setOpt(new curlpp::options::PostFieldSize(body.length()));
+
+			ostringstream os_response;
+			r.setOpt(new curlpp::options::WriteStream(&os_response));
+
+			r.perform();
+			string response_data = os_response.str();
+
+			if (debug) cout << "Response:    " << response_data << endl;
+			if (!parse_result(response_data)) throw runtime_error("wake_up failed");
+
+			int timeout = 5;
+			while (true) {
+				this_thread::sleep_for(chrono::seconds(15));
+				if (available(vin)) return;
+				if (--timeout == 0) throw runtime_error("Could not wake car");
+			}
+		}
+		catch (std::exception &e) {
+			std::cerr << "Error: " << e.what() << std::endl;
+			if (--timeout == 0) throw;
+		}
+		std::this_thread::sleep_for(std::chrono::minutes(1));
 	}
 }
 
 void tesla_api::start_charge(std::string vin)
 {
-	string url = account.tesla_proxy + "/api/1/vehicles/" + vin + "/command/charge_start";
-	if (debug) cout << "url     :    " << url << endl;
+	int timeout = 10;
+	while (true) {
+		try {
+			string url = account.tesla_proxy + "/api/1/vehicles/" + vin + "/command/charge_start";
+			if (debug) cout << "url     :    " << url << endl;
 
-	curlpp::Cleanup clean;
-	curlpp::Easy r;
-	r.setOpt(new curlpp::options::Url(url));
+			curlpp::Cleanup clean;
+			curlpp::Easy r;
+			r.setOpt(new curlpp::options::Url(url));
 
-	list<string> headers;
-	headers.push_back("Content-Type: application/json");
-	headers.push_back("Authorization: Bearer " + m_token);
-	r.setOpt(new curlpp::options::HttpHeader(headers));
+			list<string> headers;
+			headers.push_back("Content-Type: application/json");
+			headers.push_back("Authorization: Bearer " + m_token);
+			r.setOpt(new curlpp::options::HttpHeader(headers));
 
-	string body;
-	r.setOpt(new curlpp::options::PostFields(body));
-	r.setOpt(new curlpp::options::PostFieldSize(body.length()));
+			string body;
+			r.setOpt(new curlpp::options::PostFields(body));
+			r.setOpt(new curlpp::options::PostFieldSize(body.length()));
 
-	ostringstream os_response;
-	r.setOpt(new curlpp::options::WriteStream(&os_response));
+			ostringstream os_response;
+			r.setOpt(new curlpp::options::WriteStream(&os_response));
 
-	r.perform();
-	string response_data = os_response.str();
+			r.perform();
+			string response_data = os_response.str();
 
-	if (debug) cout << "Response:    " << response_data << endl;
-	if (!parse_result(response_data)) throw runtime_error("start_charge failed");
+			if (debug) cout << "Response:    " << response_data << endl;
+			if (!parse_result(response_data)) throw runtime_error("start_charge failed");
+			break;
+		}
+		catch (std::exception &e) {
+			std::cerr << "Error: " << e.what() << std::endl;
+			if (--timeout == 0) throw;
+		}
+		std::this_thread::sleep_for(std::chrono::minutes(1));
+	}
 }
 
 string tesla_api::vehicle_data(string vin)
 {
-	string url = account.tesla_audience + "/api/1/vehicles/" + vin + "/vehicle_data?endpoints=" + curlpp::escape("charge_state;drive_state;location_data"); 
-	if (debug) cout << "url     :    " << url << endl;
+	int timeout = 10;
+	while (true) {
+		try {
+			string url = account.tesla_audience + "/api/1/vehicles/" + vin + "/vehicle_data?endpoints=" + curlpp::escape("charge_state;drive_state;location_data"); 
+			if (debug) cout << "url     :    " << url << endl;
 
-	curlpp::Cleanup clean;
-	curlpp::Easy r;
-	r.setOpt(new curlpp::options::Url(url));
+			curlpp::Cleanup clean;
+			curlpp::Easy r;
+			r.setOpt(new curlpp::options::Url(url));
 
-	list<string> headers;
-	headers.push_back("Content-Type: application/json");
-	headers.push_back("Authorization: Bearer " + m_token);
-	r.setOpt(new curlpp::options::HttpHeader(headers));
+			list<string> headers;
+			headers.push_back("Content-Type: application/json");
+			headers.push_back("Authorization: Bearer " + m_token);
+			r.setOpt(new curlpp::options::HttpHeader(headers));
 
-	ostringstream os_response;
-	r.setOpt(new curlpp::options::WriteStream(&os_response));
+			ostringstream os_response;
+			r.setOpt(new curlpp::options::WriteStream(&os_response));
 
-	r.perform();
-	string response_data = os_response.str();
-	if (response_data.size() == 0) throw runtime_error("No reply from server");
+			r.perform();
+			string response_data = os_response.str();
+			if (response_data.size() == 0) throw runtime_error("No reply from server");
 
-	if (debug) cout << "Response:    " << response_data << endl;
-	return response_data;
+			if (debug) cout << "Response:    " << response_data << endl;
+			return response_data;
+		}
+		catch (std::exception &e) {
+			std::cerr << "Error: " << e.what() << std::endl;
+			if (--timeout == 0) throw;
+		}
+		std::this_thread::sleep_for(std::chrono::minutes(1));
+	}
+	return {};
 }
 
 void tesla_api::set_charge_limit(std::string vin, int percent)
 {
-	string url = account.tesla_proxy + "/api/1/vehicles/" + vin + "/command/set_charge_limit";
-	if (debug) cout << "url     :    " << url << endl;
+	int timeout = 10;
+	while (true) {
+		try {
+			string url = account.tesla_proxy + "/api/1/vehicles/" + vin + "/command/set_charge_limit";
+			if (debug) cout << "url     :    " << url << endl;
 
-	curlpp::Cleanup clean;
-	curlpp::Easy r;
-	r.setOpt(new curlpp::options::Url(url));
+			curlpp::Cleanup clean;
+			curlpp::Easy r;
+			r.setOpt(new curlpp::options::Url(url));
 
-	list<string> headers;
-	headers.push_back("Content-Type: application/json");
-	headers.push_back("Authorization: Bearer " + m_token);
-	r.setOpt(new curlpp::options::HttpHeader(headers));
+			list<string> headers;
+			headers.push_back("Content-Type: application/json");
+			headers.push_back("Authorization: Bearer " + m_token);
+			r.setOpt(new curlpp::options::HttpHeader(headers));
 
-	string body;
-	body += '{';
-	body += "\"percent\": " + to_string(percent);
-	body += '}';
-	r.setOpt(new curlpp::options::PostFields(body));
-	r.setOpt(new curlpp::options::PostFieldSize(body.length()));
+			string body;
+			body += '{';
+			body += "\"percent\": " + to_string(percent);
+			body += '}';
+			r.setOpt(new curlpp::options::PostFields(body));
+			r.setOpt(new curlpp::options::PostFieldSize(body.length()));
 
-	ostringstream os_response;
-	r.setOpt(new curlpp::options::WriteStream(&os_response));
+			ostringstream os_response;
+			r.setOpt(new curlpp::options::WriteStream(&os_response));
 
-	r.perform();
-	string response_data = os_response.str();
-	if (response_data.size() == 0) throw runtime_error("No reply from server");
+			r.perform();
+			string response_data = os_response.str();
+			if (response_data.size() == 0) throw runtime_error("No reply from server");
 
-	if (debug) cout << "Response:    " << response_data << endl;
-	if (!parse_result(response_data)) throw runtime_error("set_charge_limit failed");
+			if (debug) cout << "Response:    " << response_data << endl;
+			if (!parse_result(response_data)) throw runtime_error("set_charge_limit failed");
+			break;
+		}
+		catch (std::exception &e) {
+			std::cerr << "Error: " << e.what() << std::endl;
+			if (--timeout == 0) throw;
+		}
+		std::this_thread::sleep_for(std::chrono::minutes(1));
+	}
 }
 
 void tesla_api::start_proxy()
@@ -323,70 +390,88 @@ void tesla_api::scheduled_departure(std::string vin, date::sys_time<std::chrono:
 	auto end_off_peak_m = std::chrono::duration_cast<std::chrono::minutes>(end_off_peak_time_local - date::floor<date::days>(end_off_peak_time_local));
 	auto next_event_local = date::make_zoned(date::current_zone(), next_event).get_local_time();
 	auto departure_m = std::chrono::duration_cast<std::chrono::minutes>(next_event_local - date::floor<date::days>(next_event_local));
-	{
-		string url = account.tesla_proxy + "/api/1/vehicles/" + vin + "/command/set_scheduled_charging";
-		if (debug) cout << "url     :    " << url << endl;
+	int timeout = 10;
+	while (true) {
+		try {
+			string url = account.tesla_proxy + "/api/1/vehicles/" + vin + "/command/set_scheduled_charging";
+			if (debug) cout << "url     :    " << url << endl;
 
-		curlpp::Cleanup clean;
-		curlpp::Easy r;
-		r.setOpt(new curlpp::options::Url(url));
+			curlpp::Cleanup clean;
+			curlpp::Easy r;
+			r.setOpt(new curlpp::options::Url(url));
 
-		list<string> headers;
-		headers.push_back("Content-Type: application/json");
-		headers.push_back("Authorization: Bearer " + m_token);
-		r.setOpt(new curlpp::options::HttpHeader(headers));
+			list<string> headers;
+			headers.push_back("Content-Type: application/json");
+			headers.push_back("Authorization: Bearer " + m_token);
+			r.setOpt(new curlpp::options::HttpHeader(headers));
 
-		string body;
-		body += '{';
-		body += "\"enable\": true";
-		body += ", \"time\": " + to_string(end_off_peak_m.count());
-		body += '}';
-		r.setOpt(new curlpp::options::PostFields(body));
-		r.setOpt(new curlpp::options::PostFieldSize(body.length()));
+			string body;
+			body += '{';
+			body += "\"enable\": true";
+			body += ", \"time\": " + to_string(end_off_peak_m.count());
+			body += '}';
+			r.setOpt(new curlpp::options::PostFields(body));
+			r.setOpt(new curlpp::options::PostFieldSize(body.length()));
 
-		ostringstream os_response;
-		r.setOpt(new curlpp::options::WriteStream(&os_response));
+			ostringstream os_response;
+			r.setOpt(new curlpp::options::WriteStream(&os_response));
 
-		r.perform();
-		string response_data = os_response.str();
+			r.perform();
+			string response_data = os_response.str();
 
-		if (debug) cout << "Response:    " << response_data << endl;
-		if (!parse_result(response_data)) throw runtime_error("set_scheduled_departure failed");
+			if (debug) cout << "Response:    " << response_data << endl;
+			if (!parse_result(response_data)) throw runtime_error("set_scheduled_departure failed");
+			break;
+		}
+		catch (std::exception &e) {
+			std::cerr << "Error: " << e.what() << std::endl;
+			if (--timeout == 0) throw;
+		}
+		std::this_thread::sleep_for(std::chrono::minutes(1));
 	}
-	{
-		string url = account.tesla_proxy + "/api/1/vehicles/" + vin + "/command/set_scheduled_departure";
-		if (debug) cout << "url     :    " << url << endl;
+	timeout = 10;
+	while (true) {
+		try {
+			string url = account.tesla_proxy + "/api/1/vehicles/" + vin + "/command/set_scheduled_departure";
+			if (debug) cout << "url     :    " << url << endl;
 
-		curlpp::Cleanup clean;
-		curlpp::Easy r;
-		r.setOpt(new curlpp::options::Url(url));
+			curlpp::Cleanup clean;
+			curlpp::Easy r;
+			r.setOpt(new curlpp::options::Url(url));
 
-		list<string> headers;
-		headers.push_back("Content-Type: application/json");
-		headers.push_back("Authorization: Bearer " + m_token);
-		r.setOpt(new curlpp::options::HttpHeader(headers));
+			list<string> headers;
+			headers.push_back("Content-Type: application/json");
+			headers.push_back("Authorization: Bearer " + m_token);
+			r.setOpt(new curlpp::options::HttpHeader(headers));
 
-		string body;
-		body += '{';
-		body += "\"enable\": true";
-		body += ", \"off_peak_charging_enabled\": false";
-		body += ", \"preconditioning_enabled\": "; body += (preheat ? "true" : "false");
-		body += ", \"preconditioning_weekdays_only\": false";
-		body += ", \"off_peak_charging_weekdays_only\": false";
-		body += ", \"departure_time\": " + to_string(departure_m.count());
-		body += ", \"end_off_peak_time\": " + to_string(end_off_peak_m.count());
-		body += '}';
-		r.setOpt(new curlpp::options::PostFields(body));
-		r.setOpt(new curlpp::options::PostFieldSize(body.length()));
+			string body;
+			body += '{';
+			body += "\"enable\": true";
+			body += ", \"off_peak_charging_enabled\": false";
+			body += ", \"preconditioning_enabled\": "; body += (preheat ? "true" : "false");
+			body += ", \"preconditioning_weekdays_only\": false";
+			body += ", \"off_peak_charging_weekdays_only\": false";
+			body += ", \"departure_time\": " + to_string(departure_m.count());
+			body += ", \"end_off_peak_time\": " + to_string(end_off_peak_m.count());
+			body += '}';
+			r.setOpt(new curlpp::options::PostFields(body));
+			r.setOpt(new curlpp::options::PostFieldSize(body.length()));
 
-		ostringstream os_response;
-		r.setOpt(new curlpp::options::WriteStream(&os_response));
+			ostringstream os_response;
+			r.setOpt(new curlpp::options::WriteStream(&os_response));
 
-		r.perform();
-		string response_data = os_response.str();
+			r.perform();
+			string response_data = os_response.str();
 
-		if (debug) cout << "Response:    " << response_data << endl;
-		if (!parse_result(response_data)) throw runtime_error("set_scheduled_departure failed");
+			if (debug) cout << "Response:    " << response_data << endl;
+			if (!parse_result(response_data)) throw runtime_error("set_scheduled_departure failed");
+			break;
+		}
+		catch (std::exception &e) {
+			std::cerr << "Error: " << e.what() << std::endl;
+			if (--timeout == 0) throw;
+		}
+		std::this_thread::sleep_for(std::chrono::minutes(1));
 	}
 }
 
@@ -400,70 +485,88 @@ void tesla_api::scheduled_charging(std::string vin, date::sys_time<std::chrono::
 	auto next_event_local = date::make_zoned(date::current_zone(), next_event).get_local_time();
 	auto departure_m = std::chrono::duration_cast<std::chrono::minutes>(next_event_local - date::floor<date::days>(next_event_local));
 
-	{
-		string url = account.tesla_proxy + "/api/1/vehicles/" + vin + "/command/set_scheduled_departure";
-		if (debug) cout << "url     :    " << url << endl;
+	int timeout = 10;
+	while (true) {
+		try {
+			string url = account.tesla_proxy + "/api/1/vehicles/" + vin + "/command/set_scheduled_departure";
+			if (debug) cout << "url     :    " << url << endl;
 
-		curlpp::Cleanup clean;
-		curlpp::Easy r;
-		r.setOpt(new curlpp::options::Url(url));
+			curlpp::Cleanup clean;
+			curlpp::Easy r;
+			r.setOpt(new curlpp::options::Url(url));
 
-		list<string> headers;
-		headers.push_back("Content-Type: application/json");
-		headers.push_back("Authorization: Bearer " + m_token);
-		r.setOpt(new curlpp::options::HttpHeader(headers));
+			list<string> headers;
+			headers.push_back("Content-Type: application/json");
+			headers.push_back("Authorization: Bearer " + m_token);
+			r.setOpt(new curlpp::options::HttpHeader(headers));
 
-		string body;
-		body += '{';
-		body += "\"enable\": false";
-		body += ", \"off_peak_charging_enabled\": false";
-		body += ", \"preconditioning_enabled\": false";
-		body += ", \"preconditioning_weekdays_only\": false";
-		body += ", \"off_peak_charging_weekdays_only\": false";
-		body += ", \"departure_time\": " + to_string(departure_m.count());
-		body += ", \"end_off_peak_time\": " + to_string(departure_m.count());
-		body += '}';
-		r.setOpt(new curlpp::options::PostFields(body));
-		r.setOpt(new curlpp::options::PostFieldSize(body.length()));
+			string body;
+			body += '{';
+			body += "\"enable\": false";
+			body += ", \"off_peak_charging_enabled\": false";
+			body += ", \"preconditioning_enabled\": false";
+			body += ", \"preconditioning_weekdays_only\": false";
+			body += ", \"off_peak_charging_weekdays_only\": false";
+			body += ", \"departure_time\": " + to_string(departure_m.count());
+			body += ", \"end_off_peak_time\": " + to_string(departure_m.count());
+			body += '}';
+			r.setOpt(new curlpp::options::PostFields(body));
+			r.setOpt(new curlpp::options::PostFieldSize(body.length()));
 
-		ostringstream os_response;
-		r.setOpt(new curlpp::options::WriteStream(&os_response));
+			ostringstream os_response;
+			r.setOpt(new curlpp::options::WriteStream(&os_response));
 
-		r.perform();
-		string response_data = os_response.str();
+			r.perform();
+			string response_data = os_response.str();
 
-		if (debug) cout << "Response:    " << response_data << endl;
-		if (!parse_result(response_data)) throw runtime_error("set_scheduled_charging failed");
+			if (debug) cout << "Response:    " << response_data << endl;
+			if (!parse_result(response_data)) throw runtime_error("set_scheduled_charging failed");
+			break;
+		}
+		catch (std::exception &e) {
+			std::cerr << "Error: " << e.what() << std::endl;
+			if (--timeout == 0) throw;
+		}
+		std::this_thread::sleep_for(std::chrono::minutes(1));
 	}
-	{
-		string url = account.tesla_proxy + "/api/1/vehicles/" + vin + "/command/set_scheduled_charging";
-		if (debug) cout << "url     :    " << url << endl;
+	timeout = 10;
+	while (true) {
+		try {
+			string url = account.tesla_proxy + "/api/1/vehicles/" + vin + "/command/set_scheduled_charging";
+			if (debug) cout << "url     :    " << url << endl;
 
-		curlpp::Cleanup clean;
-		curlpp::Easy r;
-		r.setOpt(new curlpp::options::Url(url));
+			curlpp::Cleanup clean;
+			curlpp::Easy r;
+			r.setOpt(new curlpp::options::Url(url));
 
-		list<string> headers;
-		headers.push_back("Content-Type: application/json");
-		headers.push_back("Authorization: Bearer " + m_token);
-		r.setOpt(new curlpp::options::HttpHeader(headers));
+			list<string> headers;
+			headers.push_back("Content-Type: application/json");
+			headers.push_back("Authorization: Bearer " + m_token);
+			r.setOpt(new curlpp::options::HttpHeader(headers));
 
-		string body;
-		body += '{';
-		body += "\"enable\": true";
-		body += ", \"time\": " + to_string(m.count());
-		body += '}';
-		r.setOpt(new curlpp::options::PostFields(body));
-		r.setOpt(new curlpp::options::PostFieldSize(body.length()));
+			string body;
+			body += '{';
+			body += "\"enable\": true";
+			body += ", \"time\": " + to_string(m.count());
+			body += '}';
+			r.setOpt(new curlpp::options::PostFields(body));
+			r.setOpt(new curlpp::options::PostFieldSize(body.length()));
 
-		ostringstream os_response;
-		r.setOpt(new curlpp::options::WriteStream(&os_response));
+			ostringstream os_response;
+			r.setOpt(new curlpp::options::WriteStream(&os_response));
 
-		r.perform();
-		string response_data = os_response.str();
+			r.perform();
+			string response_data = os_response.str();
 
-		if (debug) cout << "Response:    " << response_data << endl;
-		if (!parse_result(response_data)) throw runtime_error("scheduled_charging failed");
+			if (debug) cout << "Response:    " << response_data << endl;
+			if (!parse_result(response_data)) throw runtime_error("scheduled_charging failed");
+			break;
+		}
+		catch (std::exception &e) {
+			std::cerr << "Error: " << e.what() << std::endl;
+			if (--timeout == 0) throw;
+		}
+		std::this_thread::sleep_for(std::chrono::minutes(1));
 	}
 }
 
@@ -477,70 +580,88 @@ void tesla_api::scheduled_disable(std::string vin, date::sys_time<std::chrono::s
 	auto next_event_local = date::make_zoned(date::current_zone(), next_event).get_local_time();
 	auto departure_m = std::chrono::duration_cast<std::chrono::minutes>(next_event_local - date::floor<date::days>(next_event_local));
 
-	{
-		string url = account.tesla_proxy + "/api/1/vehicles/" + vin + "/command/set_scheduled_departure";
-		if (debug) cout << "url     :    " << url << endl;
+	int timeout = 10;
+	while (true) {
+		try {
+			string url = account.tesla_proxy + "/api/1/vehicles/" + vin + "/command/set_scheduled_departure";
+			if (debug) cout << "url     :    " << url << endl;
 
-		curlpp::Cleanup clean;
-		curlpp::Easy r;
-		r.setOpt(new curlpp::options::Url(url));
+			curlpp::Cleanup clean;
+			curlpp::Easy r;
+			r.setOpt(new curlpp::options::Url(url));
 
-		list<string> headers;
-		headers.push_back("Content-Type: application/json");
-		headers.push_back("Authorization: Bearer " + m_token);
-		r.setOpt(new curlpp::options::HttpHeader(headers));
+			list<string> headers;
+			headers.push_back("Content-Type: application/json");
+			headers.push_back("Authorization: Bearer " + m_token);
+			r.setOpt(new curlpp::options::HttpHeader(headers));
 
-		string body;
-		body += '{';
-		body += "\"enable\": false";
-		body += ", \"off_peak_charging_enabled\": false";
-		body += ", \"preconditioning_enabled\": false";
-		body += ", \"preconditioning_weekdays_only\": false";
-		body += ", \"off_peak_charging_weekdays_only\": false";
-		body += ", \"departure_time\": " + to_string(departure_m.count());
-		body += ", \"end_off_peak_time\": " + to_string(departure_m.count());
-		body += '}';
-		r.setOpt(new curlpp::options::PostFields(body));
-		r.setOpt(new curlpp::options::PostFieldSize(body.length()));
+			string body;
+			body += '{';
+			body += "\"enable\": false";
+			body += ", \"off_peak_charging_enabled\": false";
+			body += ", \"preconditioning_enabled\": false";
+			body += ", \"preconditioning_weekdays_only\": false";
+			body += ", \"off_peak_charging_weekdays_only\": false";
+			body += ", \"departure_time\": " + to_string(departure_m.count());
+			body += ", \"end_off_peak_time\": " + to_string(departure_m.count());
+			body += '}';
+			r.setOpt(new curlpp::options::PostFields(body));
+			r.setOpt(new curlpp::options::PostFieldSize(body.length()));
 
-		ostringstream os_response;
-		r.setOpt(new curlpp::options::WriteStream(&os_response));
+			ostringstream os_response;
+			r.setOpt(new curlpp::options::WriteStream(&os_response));
 
-		r.perform();
-		string response_data = os_response.str();
+			r.perform();
+			string response_data = os_response.str();
 
-		if (debug) cout << "Response:    " << response_data << endl;
-		if (!parse_result(response_data)) throw runtime_error("set_scheduled_disabled failed");
+			if (debug) cout << "Response:    " << response_data << endl;
+			if (!parse_result(response_data)) throw runtime_error("set_scheduled_disabled failed");
+			break;
+		}
+		catch (std::exception &e) {
+			std::cerr << "Error: " << e.what() << std::endl;
+			if (--timeout == 0) throw;
+		}
+		std::this_thread::sleep_for(std::chrono::minutes(1));
 	}
-	{
-		string url = account.tesla_proxy + "/api/1/vehicles/" + vin + "/command/set_scheduled_charging";
-		if (debug) cout << "url     :    " << url << endl;
+	timeout = 10;
+	while (true) {
+		try {
+			string url = account.tesla_proxy + "/api/1/vehicles/" + vin + "/command/set_scheduled_charging";
+			if (debug) cout << "url     :    " << url << endl;
 
-		curlpp::Cleanup clean;
-		curlpp::Easy r;
-		r.setOpt(new curlpp::options::Url(url));
+			curlpp::Cleanup clean;
+			curlpp::Easy r;
+			r.setOpt(new curlpp::options::Url(url));
 
-		list<string> headers;
-		headers.push_back("Content-Type: application/json");
-		headers.push_back("Authorization: Bearer " + m_token);
-		r.setOpt(new curlpp::options::HttpHeader(headers));
+			list<string> headers;
+			headers.push_back("Content-Type: application/json");
+			headers.push_back("Authorization: Bearer " + m_token);
+			r.setOpt(new curlpp::options::HttpHeader(headers));
 
-		string body;
-		body += '{';
-		body += "\"enable\": false";
-		body += ", \"time\": " + to_string(m.count());
-		body += '}';
-		r.setOpt(new curlpp::options::PostFields(body));
-		r.setOpt(new curlpp::options::PostFieldSize(body.length()));
+			string body;
+			body += '{';
+			body += "\"enable\": false";
+			body += ", \"time\": " + to_string(m.count());
+			body += '}';
+			r.setOpt(new curlpp::options::PostFields(body));
+			r.setOpt(new curlpp::options::PostFieldSize(body.length()));
 
-		ostringstream os_response;
-		r.setOpt(new curlpp::options::WriteStream(&os_response));
+			ostringstream os_response;
+			r.setOpt(new curlpp::options::WriteStream(&os_response));
 
-		r.perform();
-		string response_data = os_response.str();
+			r.perform();
+			string response_data = os_response.str();
 
-		if (debug) cout << "Response:    " << response_data << endl;
-		if (!parse_result(response_data)) throw runtime_error("set_scheduled_disabled failed");
+			if (debug) cout << "Response:    " << response_data << endl;
+			if (!parse_result(response_data)) throw runtime_error("set_scheduled_disabled failed");
+			break;
+		}
+		catch (std::exception &e) {
+			std::cerr << "Error: " << e.what() << std::endl;
+			if (--timeout == 0) throw;
+		}
+		std::this_thread::sleep_for(std::chrono::minutes(1));
 	}
 }
 

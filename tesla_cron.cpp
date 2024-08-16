@@ -48,10 +48,6 @@
 
 #include "config.inc"
 
-namespace {
-	const bool debug = true;
-}
-
 constexpr int max_charge_hours = 6;
 
 constexpr int charge_now_limit       = 30;   // Start charge now below this level
@@ -94,7 +90,6 @@ vehicle_data parse_vehicle_data(std::string data)
 	vehicle_data vd;
 	Document doc;
 	doc.Parse(data.c_str());
-	if (debug) std::cout << "parse_vehicle_data: " << data.c_str() << std::endl;
 
 	if (!doc.IsObject() || !doc.HasMember("response")) throw std::runtime_error("No response");
 	const Value &response = doc["response"];
