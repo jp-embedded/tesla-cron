@@ -1,0 +1,16 @@
+[
+  {
+    "site": "replace-with-home-site-tag-from-el-cron",
+    "latitude": 0,
+    "longitude": 0,
+    "radius_m": 250,
+    "time_zone": "Europe/Copenhagen"
+  },
+  {
+    "site": "replace-with-second-site-tag-from-el-cron",
+    "latitude": 0,
+    "longitude": 0,
+    "radius_m": 250,
+    "time_zone": "Europe/Copenhagen"
+  }
+]

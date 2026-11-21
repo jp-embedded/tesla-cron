@@ -23,10 +23,27 @@
 #include "location.h"
 #include <string>
 #include <cmath>
+#include <chrono>
+#include <vector>
+#include <cstdint>
+
+struct charge_schedule
+{
+	std::uint64_t id = 0;
+	std::chrono::minutes start_time {0};
+	std::chrono::minutes end_time {0};
+	location loc;
+	int days_of_week = 0;
+	bool enabled = false;
+	bool one_time = false;
+	bool start_enabled = false;
+	bool end_enabled = false;
+};
 
 struct vehicle_data
 {
 	std::string vin;
+	std::chrono::system_clock::time_point fetched_at {};
 	struct 
 	{
 		int charge_current_request { 0 };
@@ -39,10 +56,13 @@ struct vehicle_data
 	struct
 	{
 		location loc;
-                bool moving;
+                bool moving = false;
 	} drive_state;
-
+	std::vector<charge_schedule> schedule;
+	std::vector<charge_schedule> precondition_schedule;
 };
 
-#endif
+vehicle_data parse_vehicle_data(const std::string& data);
+std::string serialize_vehicle_data(const vehicle_data& data);
 
+#endif

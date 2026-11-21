@@ -18,20 +18,40 @@
 #*************************************************************************/
 
 
-OBJS :=	tesla_cron.o graph.o location.o icalendarlib/date.o icalendarlib/icalendar.o icalendarlib/types.o date/src/tz.o ReverseGeocode.o elnet-forsyningsgraenser-022020.o tesla-api.o
+OBJS :=	tesla_cron.o graph.o influx.o location.o icalendarlib/date.o icalendarlib/icalendar.o icalendarlib/types.o date/src/tz.o elnet-forsyningsgraenser-022020.o tesla-api.o schedules.o prices.o vehicle_data.o control.o control_state.o controller_actions.o
 CPPFLAGS := -Wall -Wpedantic -MD -MP -O2 
-CPPFLAGS += $(shell python3-config --includes)
 CPPFLAGS += -I date/include/
-CXXFLAGS := -std=c++17 -ggdb
+CPPFLAGS += -DUSE_OS_TZDB=1
+CXXFLAGS := -std=c++17 -ggdb -pthread
  
 all: tesla_cron
 
 tesla_cron: $(OBJS)
-	$(CXX) -o $@ $^ -lcurl -lcurlpp -lboost_python3$(shell python3-config --includes | cut -d' ' -f1 | cut -d'.' -f 2) -lrrd $(shell python3-config --ldflags --embed)
+	$(CXX) -o $@ $^ -lcurl -lcurlpp -pthread
+	chmod 700 $@
 
-install:
-	install tesla_cron /usr/local/bin/
-	echo "1 * * * *	root	su -l -c /usr/local/bin/tesla_cron >> /var/log/tesla_cron.log" > /etc/cron.d/tesla_cron
+install: tesla_cron
+	./tesla_cron --proxy-health
+	install -o root -g root -m 700 tesla_cron /usr/local/bin/
+	install -m 755 run.sh /usr/local/bin/tesla-cron-run
+	install -d -m 700 /etc/tesla-cron
+	install -d -o root -g root -m 700 /var/tmp/tesla-cron
+	install -m 600 sites.example.json runtime.env.example /etc/tesla-cron/
+	if [ -f sites.json ] && [ ! -e /etc/tesla-cron/sites.json ]; then install -m 600 sites.json /etc/tesla-cron/sites.json; fi
+	echo "1,16,31,46 * * * *	root	/usr/local/bin/tesla-cron-run >> /var/log/tesla_cron.log 2>&1" > /etc/cron.d/tesla_cron
+
+test:
+	python3 -B -m unittest discover -s tests -v
+
+proxy: .proxy/tesla-http-proxy
+
+.proxy/tesla-http-proxy: scripts/build-proxy.sh
+	./scripts/build-proxy.sh
+
+install-proxy:
+	./scripts/install-proxy.sh
+
+.PHONY: all install clean test proxy install-proxy
 
 clean:
 	rm -f $(OBJS) $(OBJS:.o=.d) tesla_cron elnet-forsyningsgraenser-022020.cpp
@@ -40,6 +60,3 @@ elnet-forsyningsgraenser-022020.cpp: elnet-forsyningsgraenser-022020.json
 	xxd -i $< > $@
 
 -include $(OBJS:.o=.d)
-
-
-

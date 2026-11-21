@@ -24,28 +24,38 @@
 #include <chrono>
 #include <date/date.h>
 #include <date/tz.h>
+#include <optional>
+#include <cstdint>
+
+struct charge_schedule;
 
 class tesla_api
 {
 	public:
-	void refresh_token();
+	void refresh_token(const std::string& client_id = "");
+	void ensure_token();
+	void check_proxy();
 	bool available(std::string vin);
 	void wake_up(std::string vin);
 	void start_charge(std::string vin);
+	void stop_charge(std::string vin);
+	unsigned remaining_requests() const { return m_requests < 20 ? 20 - m_requests : 0; }
+	void preflight_request() const;
 	std::string vehicle_data(std::string vin);
+	void remove_charge_schedule(std::string vin, std::uint64_t id);
+	void remove_precondition_schedule(std::string vin, std::uint64_t id);
+	void add_schedule(const std::string& vin, const charge_schedule& schedule, bool precondition);
 	void set_charge_limit(std::string vin, int percent);
-	void scheduled_departure(std::string vin, date::sys_time<std::chrono::system_clock::duration> end_off_peak_time, date::sys_time<std::chrono::system_clock::duration> next_event, bool preheat);
-	void scheduled_charging(std::string vin, date::sys_time<std::chrono::system_clock::duration> time, date::sys_time<std::chrono::system_clock::duration> next_event);
-	void scheduled_disable(std::string vin, date::sys_time<std::chrono::system_clock::duration> time, date::sys_time<std::chrono::system_clock::duration> next_event);
 
 	protected:
 	std::string m_token;
-	bool m_proxy_started { false };
-	pid_t m_proxy_pid;
+	enum class request_kind { fleet, token, proxy, health };
+	bool m_proxy_ready = false;
+	std::string m_proxy_url, m_proxy_ca_file, m_proxy_host, m_proxy_port;
+	unsigned m_requests = 0;
+	std::string request(const std::string& url, const std::optional<std::string>& body = std::nullopt, request_kind kind = request_kind::fleet);
+	void command(const std::string& vin, const std::string& name, const std::string& body);
 
-	void start_proxy();
 };
 
 #endif
-
-

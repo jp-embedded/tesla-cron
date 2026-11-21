@@ -1,0 +1,29 @@
+[Unit]
+Description=Local Tesla command signing proxy for tesla-cron
+After=network.target
+
+[Service]
+Type=simple
+DynamicUser=yes
+LoadCredential=tls.key:/etc/tesla-cron/proxy/localhost.key
+LoadCredential=tls.crt:/etc/tesla-cron/proxy/localhost.crt
+LoadCredential=command.key:/etc/tesla-cron/proxy/command.key
+ExecStart=/usr/local/libexec/tesla-http-proxy -host 127.0.0.1 -port 4443 -cert %d/tls.crt -tls-key %d/tls.key -key-file %d/command.key -timeout 30s
+Restart=on-failure
+RestartSec=5s
+UMask=0077
+NoNewPrivileges=yes
+PrivateTmp=yes
+PrivateDevices=yes
+ProtectSystem=strict
+ProtectHome=yes
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictSUIDSGID=yes
+LockPersonality=yes
+CapabilityBoundingSet=
+
+[Install]
+WantedBy=multi-user.target

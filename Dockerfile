@@ -12,7 +12,7 @@ RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-ins
 RUN DEBIAN_FRONTEND=noninteractive apt-get -y update && DEBIAN_FRONTEND=noninteractive apt-get -y install make git
 
 # Install needed modules
-RUN DEBIAN_FRONTEND=noninteractive apt-get -y install build-essential libboost-all-dev libcurlpp-dev libcurl4-openssl-dev rapidjson-dev python3-pip librrd-dev
+RUN DEBIAN_FRONTEND=noninteractive apt-get -y install build-essential libboost-all-dev libcurlpp-dev libcurl4-openssl-dev rapidjson-dev python3-pip
 RUN python3 -m pip install teslapy
 
 # Build the system. This could be in a seperate docker

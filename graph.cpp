@@ -19,75 +19,73 @@
  
 #include "graph.h"
 
-#include <rrd.h>
+#include "influx.h"
 #include <sstream>
-#include <fstream>
 #include <iostream>
-#include <ctime>
+#include <iomanip>
+#include <locale>
+#include <stdexcept>
 
-bool file_exists(const std::string& name) 
+namespace {
+
+std::string tag(const std::string& value)
 {
-	std::ifstream f(name.c_str());
-	return f.good();
+	if (value.empty()) throw std::runtime_error("Empty telemetry tag");
+	std::string escaped;
+	for (char c : value) {
+		if (c == '\n' || c == '\r' || c == '\0') throw std::runtime_error("Invalid telemetry tag");
+		if (c == '\\' || c == ',' || c == '=' || c == ' ') escaped += '\\';
+		escaped += c;
+	}
+	return escaped;
 }
 
-void graph(const std::string &vin, const price_entry &price, int window_level, date::sys_time<std::chrono::system_clock::duration> next_event, const vehicle_data &vd)
+std::int64_t seconds(std::chrono::system_clock::time_point time)
 {
-        const bool vd_ok = vin == vd.vin;
-
-	std::string rrd_path = "/var/tmp";
-	std::string rrd_name = rrd_path + "/tesla-" + vin + ".rrd";
-	if (!file_exists(rrd_name)) {
-		const char *sources[] = {
-			"DS:price:GAUGE:90m:-1000:1000",
-			"DS:level:GAUGE:90m:-1000:1000",
-			"DS:window:GAUGE:90m:-1000:1000",
-			"DS:charging:GAUGE:90m:0:1",
-			"DS:event:GAUGE:90m:0:1",
-			"RRA:MAX:0.5:1m:1w",
-			"RRA:AVERAGE:0.5:1m:1w"
-		};
-                const int source_count = sizeof(sources) / sizeof(sources[0]);
-		rrd_create_r(rrd_name.c_str(), 1, std::time(nullptr), source_count, sources);
-        }
-
-        char charging = vd_ok ? vd.charge_state.charging_state == "Charging" ? '1' : '0' : 'U';
-
-	auto hour_end = price.time + std::chrono::minutes(60); // current price last until next hour
-
-	// if next event is within 30 min in next hour, extend this hour to that. Otherwise it could be 
-	// ignored by next invoke if eg next event is 7:05 and now is 7:10
-	if ((next_event > hour_end) && (next_event < hour_end + std::chrono::minutes(30))) {
-		hour_end = next_event;
-	}
-
-	// do 1 - 3 graphs. 0=event start (if in this hour), 1=event end (if in this hour), 2=hour end
-	std::vector<date::sys_time<std::chrono::system_clock::duration>> graph_times;
-	if (next_event <= hour_end) {
-		graph_times.push_back(next_event - std::chrono::minutes(1)); // event start.
-		graph_times.push_back(next_event);                           // event end
-	}
-        graph_times.push_back(hour_end);
-
-	bool event_on = false;
-	for (auto t : graph_times) {
-		auto time_sec = std::chrono::duration_cast<std::chrono::seconds>(t.time_since_epoch()).count();
-		std::stringstream values;
-		values << time_sec << ":" << price.price;
-		if (vd_ok) values << ":" << vd.charge_state.battery_level; else values << ":" << 'U';
-		values << ":" << window_level;
-		values << ":" << charging;
-		values << ":" << (event_on ? 1 : 0); // event 0 on first, 1 on second 
-		std::string values_str = values.str();
-		const char *updateparams[] = { "rrdupdate", rrd_name.c_str(), values_str.c_str() };
-		const int param_count = sizeof(updateparams) / sizeof(updateparams[0]);
-		int res = rrd_update(param_count, (char**)updateparams);
-		if(res !=0) std::cerr << "graph err: " << rrd_get_error() << std::endl;
-		rrd_clear_error(); 
-
-		event_on = !event_on;
-                window_level = 0; // stop window at event instead of hour end
-	}
+	return std::chrono::duration_cast<std::chrono::seconds>(time.time_since_epoch()).count();
+}
 
 }
 
+std::string telemetry_line(const std::string& site, const price_entry& price, int window_level,
+	std::chrono::system_clock::time_point next_event, const vehicle_data& data, bool cached,
+	std::chrono::system_clock::time_point observed_at)
+{
+	if (!std::isfinite(price.price) || window_level < 0 || window_level > 6 ||
+	    data.charge_state.charging_state.empty() ||
+	    data.charge_state.battery_level < 0 || data.charge_state.battery_level > 100 ||
+	    data.charge_state.charge_limit_soc < 0 || data.charge_state.charge_limit_soc > 100)
+		throw std::runtime_error("Invalid telemetry value");
+	const bool charging = data.charge_state.charging_state == "Charging";
+	const bool known_snapshot = data.fetched_at != std::chrono::system_clock::time_point{} && data.fetched_at <= observed_at;
+	const bool event = next_event >= observed_at && next_event < observed_at + std::chrono::minutes(15);
+	std::ostringstream line;
+	line.imbue(std::locale::classic());
+	line << std::setprecision(9) << std::boolalpha;
+	line << "tesla_cron,site=" << tag(site) << ",vin=" << tag(data.vin)
+	     << " price_dkk_kwh=" << price.price
+	     << ",battery_level=" << data.charge_state.battery_level << 'i'
+	     << ",charge_limit=" << data.charge_state.charge_limit_soc << 'i'
+	     << ",charge_window_level=" << window_level << 'i'
+	     << ",charging=" << charging << ",event=" << event << ",cached=" << (cached || !known_snapshot)
+	     << ",next_event=" << seconds(next_event) << 'i'
+	     << ",price_slot_start=" << seconds(price.time) << 'i';
+	if (known_snapshot) {
+		line << ",vehicle_data_time=" << seconds(data.fetched_at) << 'i'
+		     << ",snapshot_age_s=" << seconds(observed_at) - seconds(data.fetched_at) << 'i';
+	}
+	line << ' ' << seconds(observed_at) << '\n';
+	return line.str();
+}
+
+void graph(const std::string& site, const price_entry& price, int window_level,
+	std::chrono::system_clock::time_point next_event, const vehicle_data& data, bool cached)
+{
+	try {
+		write_influx_lines(telemetry_line(site, price, window_level, next_event, data, cached,
+			std::chrono::system_clock::now()));
+	} catch (const std::exception& error) {
+		// Monitoring must not fail or replay successful charging commands.
+		std::cerr << "Influx telemetry: " << error.what() << std::endl;
+	}
+}

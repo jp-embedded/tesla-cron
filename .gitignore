@@ -30,3 +30,12 @@
 *.exe
 *.out
 *.app
+/tesla_cron
+/elnet-forsyningsgraenser-022020.cpp
+
+# Local OAuth credentials
+.auth.env
+sites.json
+.runtime.env
+config.local.inc
+.proxy/
